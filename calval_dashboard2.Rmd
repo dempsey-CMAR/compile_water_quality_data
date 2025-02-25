@@ -1,0 +1,221 @@
+---
+title: "Sensor Validation"
+date: "`r format(Sys.Date(), '%Y-%b-%d')`"
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+runtime: shiny
+---
+
+```{r setup, echo=FALSE, include=FALSE}
+
+#dir.dash <- "C:/Users/Danielle Dempsey/Desktop/RProjects/Calibration/Dashboard"
+#setwd(dir.dash)
+
+# library(strings)
+library(calval2)
+library(dplyr)
+library(DT)
+#library(googlesheets4) 
+library(ggplot2)
+library(here)
+#library(janitor)
+library(plotly)
+#library(qaqcmar)
+#library(lubridate)
+library(readr)
+#library(readxl)
+#library(rsconnect)
+library(tidyr)
+
+theme_set(theme_light())
+
+```
+
+
+Cal Val Data {data-icon="fa-chart-line"}
+=======================================
+
+Column {.sidebar}
+-------------------------------------
+
+```{r}
+# create dropdown list of calibration events
+
+#selectInput("input1", choices = c("option 1", "option 2"), label = "dropdown")
+
+fileInput(
+  "upload", 
+  "Click here to upload calval data:", 
+  accept = ".csv",
+  buttonLabel = "Upload Data", 
+  multiple = TRUE
+)
+
+```
+
+```{r}
+
+load_data <- reactive({
+  req(input$upload)
+  
+  ext <- tools::file_ext(input$upload$name)
+  
+  if(ext != "csv") {
+    validate("Invalid file; Please upload a .csv file")
+  }
+  
+  #dat <- vroom::vroom(input$upload$datapath, delim = ",")
+  
+  dat <- read_csv(input$upload$datapath, show_col_types = FALSE) %>% 
+    mutate(sensor_serial_number = factor(sensor_serial_number))
+  
+  return(dat)
+  
+})
+
+vars <- reactive({
+  dat <- load_data()
+  vars <- unique(dat$variable)
+  return(vars)
+})
+
+plot_data_sn <- reactive({
+  
+  dat <- load_data()
+  
+  p <- cv_plot_flags(dat, colour_col = "sensor_serial_number")
+  
+  return(p)
+})
+
+# dat <- read_csv(here("data/VAL0068.csv"), show_col_types = FALSE) %>% 
+#   mutate(sensor_serial_number = factor(sensor_serial_number))
+
+
+
+# loaddata <- reactive({
+#   
+#   date.plot <- input$cal.date # selection from the dropdown
+#   
+#   dat.cal <- read_csv(paste("data/Calibration ", date.plot, ".csv", sep = "")) # read in the corresponding file
+#   
+#   return(dat.cal) # return the dataframe
+# })
+```
+
+
+Row {.tabset} 
+-------------------------------------
+
+### Temperature
+```{r}
+
+renderPlotly({
+  
+  p_temp <- plot_data_sn()
+  
+  validate(
+    need(input$upload != "", "Please upload validation data")
+  )
+    
+  validate(
+    need("temperature_degree_c" %in% names(p_temp), "No temperature data found")
+  )
+  
+  ggplotly(p_temp$temperature_degree_c) %>%
+    config(
+      modeBarButtonsToRemove = list("toggleSpikelines", "autoScale2d"),
+      displaylogo = FALSE,
+      toImageButtonOptions = list(
+        format = "png",
+        # filename = paste("validation_", input$cal.date, sep = ""),
+        width = 1100,
+        height = 1100
+      ))  %>%
+    layout(margin = list(b = 90, l = 90))
+    
+})
+
+```
+
+
+### Dissolved Oxygen
+```{r}
+
+renderPlotly({
+  
+  p_do <- plot_data_sn()
+  
+  validate(
+    need("dissolved_oxygen_percent_saturation" %in% names(p_do), 
+         "No dissolved oxygen data found")
+  )
+  
+  ggplotly(p_do$dissolved_oxygen_percent_saturation) %>%
+    config(modeBarButtonsToRemove = list("toggleSpikelines", "autoScale2d"),
+           displaylogo = FALSE,
+           toImageButtonOptions = list(
+             format = "png",
+             # filename = paste("validation_", input$cal.date, sep = ""),
+             width = 1100,
+             height = 1100
+           ))  %>%
+    layout(margin = list(b = 90, l = 90))
+})
+
+``` 
+
+
+### Salinity
+
+```{r}
+
+renderPlotly({
+  
+  p_sal <- plot_data_sn()
+  
+  validate(need("salinity_psu" %in% names(p_sal), "No salinity data found"))
+  
+  ggplotly(p$salinity_psu) %>%
+    config(modeBarButtonsToRemove = list("toggleSpikelines", "autoScale2d"),
+           displaylogo = FALSE,
+           toImageButtonOptions = list(
+             format = "png",
+             # filename = paste("validation_", input$cal.date, sep = ""),
+             width = 1100,
+             height = 1100
+           ))  %>%
+    layout(
+      margin = list(b = 90, l = 90) # to fully display the x and y axis labels
+    )
+})
+
+``` 
+
+Row 
+-------------------------------------
+
+### Table
+
+```{r}
+
+renderDT({
+  load_data() %>% 
+    mutate(
+      variable = if_else(
+        variable == "dissolved_oxygen_percent_saturation",
+        "dissolved_oxygen", variable)
+    ) %>% 
+    cv_summarise_flags(dt = TRUE)
+})
+```
+
+`r knitr::knit_exit()`
+
+
+
+
+
+
+
