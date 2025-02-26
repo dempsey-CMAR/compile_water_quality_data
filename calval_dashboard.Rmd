@@ -9,10 +9,8 @@ runtime: shiny
 
 ```{r setup, echo=FALSE, include=FALSE}
 
-#dir.dash <- "C:/Users/Danielle Dempsey/Desktop/RProjects/Calibration/Dashboard"
-#setwd(dir.dash)
-
-library(deps)
+library(calval)
+#library(deps)
 library(dplyr)
 library(DT)
 #library(googlesheets4) 
@@ -20,13 +18,9 @@ library(ggplot2)
 library(here)
 library(plotly)
 library(readr)
-library(remotes)
-#library(rsconnect)
 library(shiny)
 library(tidyr)
 
-remotes::install_github(repo = "https://github.com/dempsey-CMAR/calval2")
-library(calval2)
 ```
 
 
@@ -39,17 +33,14 @@ Column {.sidebar}
 ```{r}
 
 fileInput(
-  "upload", 
-  "Click here to upload calval data:", 
+  "upload",
+  "Click here to upload calval data:",
   accept = ".csv",
-  buttonLabel = "Upload Data", 
-  multiple = TRUE
+  buttonLabel = "Upload Data",
+  multiple = TRUE,
 )
 
-uiOutput("downloadUI")
-
-#downloadButton("download", "Download Summary")
-
+uiOutput("download_ui")
 ```
 
 ```{r}
@@ -81,8 +72,12 @@ plot_data_sn <- reactive({
 })
 
 
-output$downloadUI <- renderUI( {
-  downloadButton("download_button", "Download Summary", style = "width:100%;")
+output$download_ui <- renderUI({
+  downloadButton(
+    "download_button",
+    "Download Summary", 
+    style = "color: #fff; background-color: #000000; border-color: #2e6da4; width:100%")
+    #style = "color: #fff; background-color: #337ab7; border-color: #2e6da4; width:100%")
 })
 
 output$download_button <- downloadHandler(
