@@ -10,12 +10,9 @@ runtime: shiny
 ```{r setup, echo=FALSE, include=FALSE}
 
 library(calval)
-#library(deps)
 library(dplyr)
 library(DT)
-#library(googlesheets4) 
 library(ggplot2)
-library(here)
 library(plotly)
 library(readr)
 library(shiny)
