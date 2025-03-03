@@ -42,12 +42,12 @@ output$compile_button <- renderUI({
   actionButton(
     "compile", "Import & Compile", 
     width = '100%',
-    onclick = "location.href='#section-compile-data';")
+    onclick = "location.href='#section-compiled-data';")
 })
 
 
 output$trim_start <- renderUI({
-  dat <- load_data()
+  dat <- compile_data()
   textInput(
     "ts_start", "First Good Timestamp",
     value = min(dat$timestamp_utc)
@@ -55,7 +55,7 @@ output$trim_start <- renderUI({
 })
 
 output$trim_end <- renderUI({
-  dat <- load_data()
+  dat <- compile_data()
   textInput(
     "ts_end", "Last Good Timestamp",
     value = max(dat$timestamp_utc)
@@ -64,7 +64,11 @@ output$trim_end <- renderUI({
 
 output$trim_button <- renderUI({
   req(input$compile)
-  actionButton("apply_trim", "Trim", width = '100%',)
+  actionButton(
+    "apply_trim", 
+    "Trim", 
+    width = '100%',
+    onclick = "location.href='#section-trimmed-data';")
 })
 
 output$val_button <- renderUI({
@@ -74,7 +78,7 @@ output$val_button <- renderUI({
   actionButton(
     "apply_val", "Validate", 
     width = '100%',
-    onclick = "location.href='#section-validate-sensors';")
+    onclick = "location.href='#section-sensor-validation';")
 })
 
 #########################################
@@ -87,7 +91,7 @@ file_path <- reactive({
 })
   
 
-load_data <- eventReactive(input$compile, {
+compile_data <- eventReactive(input$compile, {
   path <- file_path()
   validate(need(path != "", "Please choose a folder"))
   
@@ -105,7 +109,7 @@ trim_data <- eventReactive(input$apply_trim, {
   ts_min <- input$ts_start
   ts_max <- input$ts_end
   
-  dat <- load_data() %>% 
+  dat <- compile_data() %>% 
     filter(
       timestamp_utc >= ts_min,
       timestamp_utc <= ts_max
@@ -196,18 +200,18 @@ Instructions {data-icon="fa-circle-info"}
 Explanation
 
 
-Compile Data {data-icon="fa-table"}
+Compiled Data {data-icon="fa-table"}
 =======================================
 
 Col {.tabset}
 -------------------------------------
 
-### Raw Data
+### Figure
 ```{r}
 
 output$p_raw <- renderPlotly({
   
-  dat <- load_data()
+  dat <- compile_data()
   
   validate(need(nrow(dat) > 0, "No temperature data found"))
   
@@ -232,7 +236,39 @@ output$p_raw <- renderPlotly({
 plotlyOutput("p_raw")
 ```
 
-### Trimmed Data
+### Data
+```{r}
+renderDT(
+  compile_data() %>% 
+    datatable(
+      extensions = 'Buttons', 
+      options = dt_options, 
+      rownames = FALSE)
+)
+```
+
+
+
+Col {data-height=200}
+-------------------------------------
+
+### Print Timestamp
+```{r}
+renderText(ts_click())
+```
+
+### Deployment Summary
+```{r}
+
+```
+
+Trimmed Data {data-icon="fa-scissors"}
+=======================================
+
+Col {.tabset}
+-------------------------------------
+
+### Trimmed Data 
 ```{r}
 
 renderPlotly({
@@ -261,7 +297,6 @@ renderPlotly({
 
 ```
 
-
 ### Data Table
 ```{r}
 # will be blank until trim applied
@@ -277,20 +312,8 @@ renderDT(
 ```
 
 
-Col {data-height=200}
--------------------------------------
 
-### Print Timestamp
-```{r}
-renderText(ts_click())
-```
-
-### Summary Statistics
-```{r}
-
-```
-
-Validate Sensors {data-icon="fa-check"}
+Sensor Validation {data-icon="fa-check"}
 =======================================
 
 Row {.tabset} 
