@@ -1,0 +1,181 @@
+---
+title: "Sensor Validation"
+date: "`r format(Sys.Date(), '%Y-%b-%d')`"
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+runtime: shiny
+---
+
+```{r setup, echo=FALSE, include=FALSE}
+library(dplyr)
+library(sensorstrings)
+library(shiny)
+library(shinyFiles)
+```
+
+
+Cal Val Data {data-icon="fa-chart-line"}
+=======================================
+
+Column {.sidebar}
+-------------------------------------
+
+```{r}
+fileInput(
+  "upload",
+  "Upload Zip file:",
+  accept = ".zip",
+  buttonLabel = "Upload Data",
+  multiple = TRUE,
+)
+```
+
+```{r}
+
+get_files <- reactive({
+  req(input$upload)
+  files <- unzip(input$upload$datapath, list = FALSE)
+  files <- files[grep(".csv", files)]
+  
+  return(files)
+})
+
+read_log <- reactive({
+  req(input$upload)
+
+  zip_files <- get_files()
+
+  path <- zip_files[grep("log", zip_files)]
+
+  ss_log <- ss_read_log_simple(path, parse = TRUE)
+
+  return(ss_log)
+})
+
+
+read_hobo <- reactive({
+  req(input$upload)
+  
+  zip_files <- get_files()
+  path <- zip_files[grep("hobo", zip_files)]
+  
+  log <- read_log()
+  
+  dat <- ss_compile_hobo_data(
+    path,
+    sn_table = log$sn_table,
+    deployment_dates = log$deployment_dates,
+    trim = FALSE
+  )
+  
+  return(dat)
+})
+
+
+read_aquameasure <- reactive({
+  req(input$upload)
+  
+  zip_files <- get_files()
+  path <- zip_files[grep("aquameasure", zip_files)]
+  
+  log <- read_log()
+
+  dat <- ss_compile_aquameasure_data(
+    path,
+    sn_table = log$sn_table,
+    deployment_dates = log$deployment_dates,
+    trim = FALSE
+  )
+
+  return(dat)
+})
+
+read_vemco <- reactive({
+  req(input$upload)
+  
+  zip_files <- get_files()
+  path <- zip_files[grep("vemco", zip_files)]
+  
+  log <- read_log()
+
+  dat <- ss_compile_vemco_data(
+    path,
+    sn_table = log$sn_table,
+    deployment_dates = log$deployment_dates,
+    trim = FALSE
+  )
+
+  return(dat)
+})
+
+# observeEvent(input$upload, {
+#   showNotification("Compiling data. This may take several minutes")
+# })
+
+observeEvent(input$upload, {
+  showModal(
+    modalDialog(
+      "Compiling data. This may take several minutes",
+      easyClose = TRUE
+    ))
+})  
+```
+
+
+Col
+-------------------------------------
+
+### Path
+```{r}
+renderPrint(get_files())
+```
+
+### Log
+```{r}
+renderTable({
+  log_info <- read_log()
+
+  log_info$sn_table 
+})
+```
+
+Col {.tabset}
+-------------------------------------
+
+### aquaMeasure
+```{r}
+renderTable({ 
+  zip_files <- get_files()
+  path <- zip_files[grep("aquameasure", zip_files)]
+  
+  validate(need(length(path) > 0, "no aquameasure data"))
+  
+  read_aquameasure() 
+})
+```
+
+### Hobo
+```{r}
+renderTable({ 
+  zip_files <- get_files()
+  path <- zip_files[grep("hobo", zip_files)]
+  
+  validate(need(length(path) > 0, "no hobo data"))
+  
+  read_hobo() 
+})
+```
+
+### Vemco
+```{r}
+renderTable({ 
+  zip_files <- get_files()
+  path <- zip_files[grep("vemco", zip_files)]
+  
+  validate(need(length(path) > 0, "no vemco data"))
+  
+  read_vemco()
+})
+```
+
