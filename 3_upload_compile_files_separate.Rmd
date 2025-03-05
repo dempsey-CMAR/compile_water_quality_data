@@ -48,7 +48,7 @@ read_log <- reactive({
 
   path <- zip_files[grep("log", zip_files)]
 
-  ss_log <- ss_read_log_simple(path, parse = TRUE)
+  ss_log <- ss_read_log(path, parse = TRUE)
 
   return(ss_log)
 })
