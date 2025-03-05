@@ -1,0 +1,162 @@
+---
+title: "Sensor Validation"
+date: "`r format(Sys.Date(), '%Y-%b-%d')`"
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+runtime: shiny
+---
+
+```{r setup, echo=FALSE, include=FALSE}
+library(dplyr)
+library(DT)
+library(sensorstrings)
+library(shiny)
+library(shinyFiles)
+library(stringr)
+```
+
+
+Cal Val Data {data-icon="fa-chart-line"}
+=======================================
+
+Column {.sidebar}
+-------------------------------------
+
+```{r}
+fileInput(
+  "upload",
+  "Upload Zip file:",
+  accept = ".zip",
+  buttonLabel = "Upload Data",
+  multiple = TRUE,
+)
+```
+
+```{r}
+
+get_files <- reactive({
+  req(input$upload)
+  files <- unzip(input$upload$datapath, list = FALSE)
+  files <- files[grep(".csv", files)]
+  
+  return(files)
+})
+
+
+read_log <- reactive({
+  req(input$upload)
+  
+  zip_files <- get_files()
+  path <- zip_files[grep("log", zip_files)]
+  
+  ss_log <- ss_read_log(path, parse = TRUE, verbose = FALSE)
+  
+  return(ss_log)
+})
+
+compile_data <- reactive({
+  req(input$upload)
+  
+  zip_files <- get_files()
+  
+  depl_log <- read_log()
+  depl_dates <- depl_log$deployment_dates
+  sn_table <- depl_log$sn_table
+  
+  depl_data <- tibble(NULL)
+  
+  sn_am <- sn_table %>%
+    filter(str_detect(log_sensor, regex("aquameasure", ignore_case = TRUE)))
+  if(nrow(sn_am) > 0) {
+    am <- ss_compile_aquameasure_data(
+      path = zip_files[grep("aquameasure", zip_files)],
+      sn_table = sn_table,
+      deployment_dates = depl_dates,
+      trim = FALSE
+    )
+    depl_data <- bind_rows(depl_data, am)
+  }
+  
+  sn_hobo <- sn_table %>%
+    filter(str_detect(log_sensor, regex("hobo", ignore_case = TRUE)))
+  if(nrow(sn_hobo) > 0) {
+    hobo <- ss_compile_hobo_data(
+      path = zip_files[grep("hobo", zip_files)],
+      sn_table = sn_table,
+      deployment_dates = depl_dates,
+      trim = FALSE
+    )
+    depl_data <- bind_rows(depl_data, hobo)
+  }
+
+  sn_tidbit <- sn_table %>%
+    filter(str_detect(log_sensor, regex("tidbit", ignore_case = TRUE)))
+  if (nrow(sn_tidbit) > 0) {
+    tidbit <- ss_compile_hobo_data(
+      path = zip_files[grep("tidbit", zip_files)],
+      sn_table = sn_tidbit,
+      deployment_dates = depl_dates,
+      trim = FALSE,
+      sensor_make = "tidbit"
+    )
+    depl_data <- bind_rows(depl_data, tidbit)
+  }
+
+  sn_vem <- sn_table %>%
+    filter(str_detect(log_sensor, regex("VR2AR", ignore_case = TRUE)))
+  if (nrow(sn_vem) > 0) {
+    vemco <- ss_compile_vemco_data(
+      path = zip_files[grep("vemco", zip_files)],
+      sn_table = sn_vem,
+      deployment_dates = depl_dates,
+      trim = FALSE
+    )
+    depl_data <- bind_rows(depl_data, vemco)
+  }
+  
+  return(depl_data)
+})
+
+
+observeEvent(input$upload, {
+  showModal(
+    modalDialog(
+      "Compiling data. This may take several minutes",
+      easyClose = TRUE
+    ))
+})  
+```
+
+
+Col
+-------------------------------------
+
+### Path
+```{r}
+renderPrint(get_files())
+```
+
+### Log
+```{r}
+renderTable({
+  log_info <- read_log()
+  
+  log_info$sn_table 
+})
+```
+
+Col {.tabset}
+-------------------------------------
+
+### data
+```{r}
+#renderTable({ compile_data() })
+
+renderDT({ 
+  compile_data() %>% 
+    datatable()
+})
+```
+
+
