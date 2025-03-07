@@ -19,17 +19,17 @@ library(plotly)
 library(readr)
 library(sensorstrings)
 library(shiny)
+library(stringr)
 library(tidyr)
 
 dt_options <- list(
   dom = 'Bft',
-  paging = FALSE,
+  paging = TRUE,
   searching = TRUE,
   scrollY = "500px",
   buttons = c('copy', 'csv'),
   columnDefs = list(list(className = 'dt-center', targets = "_all"))
 )
-
 ```
 
 
@@ -39,18 +39,20 @@ dt_options <- list(
 #########################################
 
 output$compile_button <- renderUI({
+  req(input$upload)
+  
   actionButton(
-    "compile", "Import & Compile", 
+    "compile", "Compile Data", 
     width = '100%',
     onclick = "location.href='#section-compiled-data';")
 })
-
 
 output$trim_start <- renderUI({
   dat <- compile_data()
   textInput(
     "ts_start", "First Good Timestamp",
-    value = min(dat$timestamp_utc)
+    value = min(dat$timestamp_utc),
+    width = '100%'
   )
 })
 
@@ -58,7 +60,8 @@ output$trim_end <- renderUI({
   dat <- compile_data()
   textInput(
     "ts_end", "Last Good Timestamp",
-    value = max(dat$timestamp_utc)
+    value = max(dat$timestamp_utc),
+    width = '100%'
   )
 })
 
@@ -86,25 +89,96 @@ output$val_button <- renderUI({
 ###### Data Wrangling ################### 
 #########################################
 
-file_path <- reactive({
-  path <- paste0(here("data"), "/", input$val_id)
-  return(path)
-})
+get_files <- reactive({
+  req(input$upload)
+  files <- unzip(input$upload$datapath, list = FALSE)
+  files <- files[grep(".csv", files)]
   
+  return(files)
+})
+
+read_log <- reactive({
+  req(input$upload)
+  
+  zip_files <- get_files()
+  path <- zip_files[grep("log", zip_files)]
+  
+  ss_log <- ss_read_log(path, parse = FALSE, verbose = FALSE)
+  
+  return(ss_log)
+})
 
 compile_data <- eventReactive(input$compile, {
-  path <- file_path()
-  validate(need(path != "", "Please choose a folder"))
   
-  dat_raw <- ss_compile_deployment_data(path) %>%
-    select(
-      -c(county, waterbody, station, lease, latitude, longitude,
-         string_configuration), 
-      -contains("sensor_depth_measured")
-    ) %>% 
-    mutate(validation_id = input$val_id) %>% 
-    relocate(validation_id)
+  zip_files <- get_files()
+  
+  depl_log <- read_log() %>% ss_parse_log(verbose = FALSE)
+  depl_dates <- depl_log$deployment_dates
+  sn_table <- depl_log$sn_table
+  
+  depl_data <- tibble(NULL)
+  
+  sn_am <- sn_table %>%
+    filter(str_detect(log_sensor, regex("aquameasure", ignore_case = TRUE)))
+  if(nrow(sn_am) > 0) {
+    am <- ss_compile_aquameasure_data(
+      path = zip_files[grep("aquameasure", zip_files)],
+      sn_table = sn_table,
+      deployment_dates = depl_dates,
+      trim = TRUE
+    )
+    depl_data <- bind_rows(depl_data, am)
+  }
+  
+  sn_hobo <- sn_table %>%
+    filter(str_detect(log_sensor, regex("hobo", ignore_case = TRUE)))
+  if(nrow(sn_hobo) > 0) {
+    hobo <- ss_compile_hobo_data(
+      path = zip_files[grep("hobo", zip_files)],
+      sn_table = sn_table,
+      deployment_dates = depl_dates,
+      trim = TRUE
+    )
+    depl_data <- bind_rows(depl_data, hobo)
+  }
+  
+  sn_tidbit <- sn_table %>%
+    filter(str_detect(log_sensor, regex("tidbit", ignore_case = TRUE)))
+  if (nrow(sn_tidbit) > 0) {
+    tidbit <- ss_compile_hobo_data(
+      path = zip_files[grep("tidbit", zip_files)],
+      sn_table = sn_tidbit,
+      deployment_dates = depl_dates,
+      trim = TRUE,
+      sensor_make = "tidbit"
+    )
+    depl_data <- bind_rows(depl_data, tidbit)
+  }
+  
+  sn_vem <- sn_table %>%
+    filter(str_detect(log_sensor, regex("VR2AR", ignore_case = TRUE)))
+  if (nrow(sn_vem) > 0) {
+    vemco <- ss_compile_vemco_data(
+      path = zip_files[grep("vemco", zip_files)],
+      sn_table = sn_vem,
+      deployment_dates = depl_dates,
+      trim = TRUE
+    )
+    depl_data <- bind_rows(depl_data, vemco)
+  }
+  
+  return(depl_data)
 })
+
+
+observeEvent(input$compile, {
+  showModal(
+    modalDialog(
+      "Compiling data. This may take several minutes",
+      easyClose = TRUE
+    ))
+})  
+
 
 trim_data <- eventReactive(input$apply_trim, {
   ts_min <- input$ts_start
@@ -118,7 +192,6 @@ trim_data <- eventReactive(input$apply_trim, {
 
 
 val_data <- eventReactive(input$apply_val, {
-  
   dat <- trim_data() %>% 
     ss_pivot_longer() %>% 
     cv_round_timestamps() %>%
@@ -151,7 +224,7 @@ customize_fig <- reactive({
   req(input$data_type)
   
   if(input$data_type == "Validation") {
-    point_col <- "sensor_type"
+    point_col <- "sensor_serial_number"
     point_size <- 1
   }
   if(input$data_type == "Deployment") {
@@ -176,20 +249,24 @@ plot_data_sn <- reactive({
 ```
 
 
-Column {.sidebar data-width=300}
+Column {.sidebar data-width=350}
 =======================================
 
 ```{r}
 selectInput(
   "data_type", 
   "Select Data Type", 
-  choices = c("Deployment", "Validation")
+  choices = c("Deployment", "Validation"),
+  width = '100%'
 )
 
-selectInput(
-  "val_id", 
-  "Validation", 
-  choices = c("VAL001", "VAL0068", "VAL0069")
+fileInput(
+  "upload",
+  "Upload Zip File:",
+  accept = ".zip",
+  buttonLabel = "Upload Data",
+  multiple = FALSE,
+  width = '100%'
 )
 
 uiOutput("compile_button")
@@ -223,9 +300,9 @@ Col {.tabset}
 
 output$p_raw <- renderPlotly({
   
-  dat <- compile_data()
+  validate(need(input$compile, "No data to plot"))
   
-  validate(need(nrow(dat) > 0, "No temperature data found"))
+  dat <- compile_data()
   
   fig_params <- customize_fig()
   
@@ -236,7 +313,7 @@ output$p_raw <- renderPlotly({
     axis_label_newline = FALSE
   )
   
-  p <- ggplotly(p, source = "plot1") #%>%
+  p <- ggplotly(p, tooltip = "text", source = "plot1") #%>%
     # config(
     #   modeBarButtonsToRemove = list("toggleSpikelines", "autoScale2d"),
     #   displaylogo = FALSE,
@@ -257,16 +334,39 @@ plotlyOutput("p_raw")
 
 ### Data
 ```{r}
-renderDT(
-  compile_data() %>% 
+renderDT({
+  validate(need(input$compile, "No data to plot"))
+
+  compile_data() %>%
     datatable(
-      extensions = 'Buttons', 
-      options = dt_options, 
+      extensions = 'Buttons',
+      options = dt_options,
       rownames = FALSE)
-)
+})
 ```
 
-Col {data-height=200}
+### Log
+```{r}
+renderDT({
+  validate(need(input$compile, "No data to plot."))
+
+  read_log() %>%
+    datatable(
+      extensions = 'Buttons',
+      options = dt_options,
+      rownames = FALSE)
+})
+```
+
+### Uploaded Files
+```{r}
+renderPrint({
+  validate(need(input$upload, "No files uploaded"))
+  get_files()
+})
+```
+
+Col {data-height=50}
 -------------------------------------
 
 ### Print Timestamp
@@ -274,12 +374,6 @@ Col {data-height=200}
 renderText(ts_click())
 ```
 
-### Deployment Summary
-**Or list files from upload here
-
-```{r}
-#renderPrint(get_files())
-```
 
 Trimmed Data {data-icon="fa-scissors"}
 =======================================
@@ -291,13 +385,20 @@ Col {.tabset}
 ```{r}
 
 renderPlotly({
+  validate(need(input$apply_trim, "No trimmed data to plot"))
+  
   dat <- trim_data()
   
-  validate(need(nrow(dat) > 0, "No data to plot. Check timestamp inputs"))
+  fig_params <- customize_fig()
   
-  p <- ss_ggplot_variables(dat, axis_label_newline = FALSE)
+  p <- ss_ggplot_variables(
+    dat, 
+    color_col = fig_params$point_col, 
+    point_size = fig_params$point_size, 
+    axis_label_newline = FALSE
+  )
   
-  p <- ggplotly(p) #%>%
+  p <- ggplotly(p, tooltip = "text") #%>%
     # config(
     #   modeBarButtonsToRemove = list("toggleSpikelines", "autoScale2d"),
     #   displaylogo = FALSE,
@@ -316,18 +417,18 @@ renderPlotly({
 
 ```
 
-### Data Table
+### Data 
 ```{r}
-# will be blank until trim applied
+renderDT({
+  validate(need(input$apply_trim, "No trimmed data"))
 
-renderDT(
-  head(trim_data()) %>% 
+  trim_data() %>%
     datatable(
-      extensions = 'Buttons', 
-      options = dt_options, 
+      extensions = 'Buttons',
+      options = dt_options,
       rownames = FALSE
     )
-)
+})
 ```
 
 
@@ -342,12 +443,14 @@ Row {.tabset}
 ```{r}
 
 renderPlotly({
+  validate(need(input$apply_trim, "No validation data to plot"))
+  validate(need(input$data_type == "Validation", "No validation data to plot. Please choose 'Validation' from the 'Select Data Type' dropdown"))
+  validate(need(input$apply_val, "No validation data to plot. Please click the 'Validate' button"))
   
   p_temp <- plot_data_sn()
   
   validate(
-    need("temperature_degree_c" %in% names(p_temp), "No temperature data found")
-  )
+    need("temperature_degree_c" %in% names(p_temp), "No temperature data found"))
   
   ggplotly(p_temp$temperature_degree_c) %>%
     config(
@@ -368,6 +471,9 @@ renderPlotly({
 ```{r}
 
 renderPlotly({
+  validate(need(input$apply_trim, "No validation data to plot"))
+  validate(need(input$data_type == "Validation", "No validation data to plot. Please choose 'Validation' from the 'Select Data Type' dropdown"))
+  validate(need(input$apply_val, "No validation data to plot. Please click the 'Validate' button"))
   
   p_do <- plot_data_sn()
   
@@ -396,6 +502,9 @@ renderPlotly({
 ```{r}
 
 renderPlotly({
+  validate(need(input$apply_trim, "No validation data to plot"))
+  validate(need(input$data_type == "Validation", "No validation data to plot. Please choose 'Validation' from the 'Select Data Type' dropdown"))
+  validate(need(input$apply_val, "No validation data to plot. Please click the 'Validate' button"))
   
   p_sal <- plot_data_sn()
   
@@ -418,10 +527,14 @@ renderPlotly({
 
 ```{r}
 renderDT({
-  val_data() %>% 
+  validate(need(input$apply_trim, "No validation data to show"))
+  validate(need(input$data_type == "Validation", "No validation data to show. Please choose 'Validation' from the 'Select Data Type' dropdown"))
+  validate(need(input$apply_val, "No validation data to show. Please click the 'Validate' button"))
+
+  val_data() %>%
     datatable(
       extensions = 'Buttons',
-      options = dt_options, 
+      options = dt_options,
       rownames = FALSE
     )
 })
@@ -431,6 +544,10 @@ renderDT({
 
 ```{r}
 renderDT({
+    validate(need(input$apply_trim, "No validation results to show"))
+  validate(need(input$data_type == "Validation", "No validation results to show. Please choose 'Validation' from the 'Select Data Type' dropdown"))
+  validate(need(input$apply_val, "No validation results to show. Please click the 'Validate' button"))
+  
   val_data() %>% 
     cv_summarise_flags(dt = FALSE)  %>% 
     datatable(
