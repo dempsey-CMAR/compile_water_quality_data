@@ -24,20 +24,10 @@ library(plotly)
 library(readr)
 library(sensorstrings)
 library(shiny)
+#library(shinyjs)
 library(stringr)
 library(tidyr)
 
-# need to add separately to each table to customize file down
-# could find a way to make reactive or function in future
-# dt_options <- list(
-#   dom = 'Bft',
-#   paging = FALSE,
-#   searching = TRUE,
-#   scrollY = "500px",
-#   scrollX = "500px",
-#   buttons = c('copy', 'csv'),
-#   columnDefs = list(list(className = 'dt-center', targets = "_all"))
-# )
 ```
 
 
@@ -46,12 +36,15 @@ library(tidyr)
 ###### Reactive UI ###################### 
 #########################################
 
+button_style <- "color: #fff; background-color: #063e4d; border-color: #063e4d"
+
 output$compile_button <- renderUI({
   req(input$upload)
   
   actionButton(
     "compile", "Compile Data", 
     width = '100%',
+    style = button_style,
     onclick = "location.href='#section-compiled-data';")
 })
 
@@ -81,6 +74,7 @@ output$trim_button <- renderUI({
     "apply_trim", 
     "Trim Data", 
     width = '100%',
+    style = button_style,
     onclick = "location.href='#section-trimmed-data';")
 })
 
@@ -92,7 +86,17 @@ output$val_button <- renderUI({
   actionButton(
     "apply_val", "Validate", 
     width = '100%',
+    style = button_style,
     onclick = "location.href='#section-sensor-validation';")
+})
+
+output$clear_button <- renderUI({
+ # req(input$upload)
+ 
+  actionButton(
+    "clear_data", "Refresh App", icon("arrows-rotate"),
+    width = '100%'
+  )
 })
 
 #########################################
@@ -233,6 +237,26 @@ val_data <- eventReactive(input$apply_val, {
   return(dat)
 })
 
+
+# useShinyjs(rmd = TRUE)
+observeEvent(input$clear_data, {
+
+  session$reload()
+  
+  # #unlink(input$upload$datapath)
+  # shinyjs::reset(id = "")
+  # 
+  # output$compile_button <- NULL
+  # output$trim_start <- NULL
+  # output$trim_end <- NULL
+  # output$trim_button <- NULL
+  # output$val_button <- NULL
+  # 
+  # output$p_raw <- NULL
+  # output$p_trim <- NULL
+
+})
+
 #########################################
 ###### Figures & Tables ################## 
 #########################################
@@ -307,6 +331,7 @@ Column {.sidebar data-width=350}
 =======================================
 
 ```{r}
+
 selectInput(
   "data_type",
   "Select Data Type",
@@ -314,6 +339,9 @@ selectInput(
   selected = "Validation",
   width = '100%'
 )
+
+uiOutput("clear_button")
+#HTML("<br>")
 
 fileInput(
   "upload",
@@ -532,9 +560,14 @@ renderDT({
 
   read_log() %>%
     datatable(
-      extensions = 'Buttons',
-      options = dt_options,
-      rownames = FALSE)
+      rownames = FALSE,
+      options = list(
+        dom = 'Bft',
+        paging = FALSE,
+        searching = TRUE,
+        # scrollY = "500px",
+        scrollX = "500px",
+        columnDefs = list(list(className = 'dt-center', targets = "_all"))))
 })
 ```
 
@@ -564,21 +597,21 @@ Col {.tabset}
 ### Trimmed Data 
 ```{r}
 
-renderPlotly({
+output$p_trim <- renderPlotly({
   validate(need(input$apply_trim, "No trimmed data to plot"))
-  
+
   dat <- trim_data()
-  
+
   fig_params <- customize_fig()
-  
+
   p <- ss_ggplot_variables(
-    dat, 
-    color_col = fig_params$point_col, 
-    point_size = fig_params$point_size, 
+    dat,
+    color_col = fig_params$point_col,
+    point_size = fig_params$point_size,
     legend_name = fig_params$legend_name,
     axis_label_newline = FALSE
   )
-  
+
   p <- ggplotly(p, tooltip = "text", source = "plot2") %>%
     config(
       modeBarButtonsToRemove = list("toggleSpikelines", "autoScale2d"),
@@ -589,10 +622,11 @@ renderPlotly({
         width = 900, height = 500
       ))  %>%
     layout(margin = list(b = 90, l = 90))
-  
+
   p
 })
 
+plotlyOutput("p_trim")
 
 ```
 
@@ -746,7 +780,7 @@ renderDT({
         dom = 'Bft',
         paging = FALSE,
         searching = TRUE,
-        scrollY = "500px",
+       # scrollY = "500px",
         scrollX = "500px",
         buttons = list(
           list(extend = 'copy', title = download_name), 
@@ -781,15 +815,13 @@ renderDT({
         dom = 'Bft',
         paging = FALSE,
         searching = TRUE,
-        scrollY = "500px",
+       # scrollY = "500px",
         scrollX = "500px",
         buttons = list(
           list(extend = 'copy', title = download_name), 
           list(extend = 'csv', title = download_name) 
         ),
-        columnDefs = list(list(className = 'dt-center', targets = "_all"))
-      )
-    )
+        columnDefs = list(list(className = 'dt-center', targets = "_all"))))
 })
 ```
 
