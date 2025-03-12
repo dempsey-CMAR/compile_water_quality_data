@@ -60,7 +60,8 @@ output$trim_start <- renderUI({
   textInput(
     "ts_start", "First Good Timestamp",
     value = min(dat$timestamp_utc),
-    width = '100%'
+    width = '100%',
+    placeholder = "yyyy-mm-dd hh:mm:ss"
   )
 })
 
@@ -69,7 +70,8 @@ output$trim_end <- renderUI({
   textInput(
     "ts_end", "Last Good Timestamp",
     value = max(dat$timestamp_utc),
-    width = '100%'
+    width = '100%',
+    placeholder = "yyyy-mm-dd hh:mm:ss"
   )
 })
 
@@ -101,6 +103,7 @@ get_files <- reactive({
   req(input$upload)
   files <- unzip(input$upload$datapath, list = FALSE)
   files <- files[grep(".csv", files)]
+  files <- files[grep("other_vemco", files, invert = TRUE)]
   
   return(files)
 })
@@ -207,11 +210,15 @@ observeEvent(input$compile, {
 
 
 trim_data <- eventReactive(input$apply_trim, {
-  ts_min <- input$ts_start
-  ts_max <- input$ts_end
+  ts_min <- as_datetime(input$ts_start)
+  ts_max <- as_datetime(input$ts_end)
   
+  validate(need(!is.na(ts_min), "Fix Timestamp: the timestamp entered into the First Good Timestamp field must be in the order yyyy-mm-dd hh:mm:ss"))
+  validate(need(!is.na(ts_max), "Fix Timestamp: the timestamp entered into the Last Good Timestamp field must be in the order yyyy-mm-dd hh:mm:ss"))
+  validate(need(ts_max > ts_min, "Fix Timestamps: the timestamp entered in the First Good Timestamp field must occur before the timestamp entered in the Last Good Timestamp field"))
+    
   dat <- compile_data() %>% 
-    filter(timestamp_utc >= ts_min, timestamp_utc <= ts_max) 
+    filter(timestamp_utc >= ts_min, timestamp_utc <= ts_max)
 
   return(dat)
 })
@@ -244,6 +251,21 @@ ts_click <- reactive({
     ts_new$ts
   }
   
+})
+
+ts_click_trim <- reactive({
+  req(input$apply_trim)
+  
+  ts_info <- event_data("plotly_click", source = "plot2")
+  
+  if (is.null(ts_info)) {
+      "Click a point from the chart above to print its timestamp. Double click the chart to clear."
+  } else {
+    ts_new <- data.frame(ts = as_datetime(ts_info$x))
+    ts_new$ts <- format(ts_new$ts, "%Y-%m-%d %H:%M:%S")
+    
+    ts_new$ts
+  }
 })
 
 customize_fig <- reactive({
@@ -533,7 +555,7 @@ renderText(ts_click())
 ```
 
 
-Trimmed Data {data-icon="fa-scissors"}
+Trimmed Data {data-orientation=rows data-icon="fa-scissors"}
 =======================================
 
 Col {.tabset}
@@ -557,7 +579,7 @@ renderPlotly({
     axis_label_newline = FALSE
   )
   
-  p <- ggplotly(p, tooltip = "text") %>%
+  p <- ggplotly(p, tooltip = "text", source = "plot2") %>%
     config(
       modeBarButtonsToRemove = list("toggleSpikelines", "autoScale2d"),
       displaylogo = FALSE,
@@ -602,6 +624,12 @@ renderDT({
 })
 ```
 
+Col {data-height=50}
+-------------------------------------
+### Print Timestamp
+```{r}
+renderText(ts_click_trim())
+```
 
 Sensor Validation {data-icon="fa-check"}
 =======================================
