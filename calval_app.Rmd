@@ -1,6 +1,6 @@
 ---
 title: "CMAR Sensor Validation App"
-date: "`r format(Sys.Date(), '%Y-%b-%d')`"
+date: "version 0.0.9000"
 output:
   flexdashboard::flex_dashboard:
     vertical_layout: fill
@@ -27,14 +27,17 @@ library(shiny)
 library(stringr)
 library(tidyr)
 
-dt_options <- list(
-  dom = 'Bft',
-  paging = FALSE,
-  searching = TRUE,
-  scrollY = "500px",
-  buttons = c('copy', 'csv'),
-  columnDefs = list(list(className = 'dt-center', targets = "_all"))
-)
+# need to add separately to each table to customize file down
+# could find a way to make reactive or function in future
+# dt_options <- list(
+#   dom = 'Bft',
+#   paging = FALSE,
+#   searching = TRUE,
+#   scrollY = "500px",
+#   scrollX = "500px",
+#   buttons = c('copy', 'csv'),
+#   columnDefs = list(list(className = 'dt-center', targets = "_all"))
+# )
 ```
 
 
@@ -100,6 +103,18 @@ get_files <- reactive({
   files <- files[grep(".csv", files)]
   
   return(files)
+})
+
+get_folder_name <- reactive({
+  req(input$upload)
+  
+  files <- get_files()
+  
+  files <- sub("./", "", files[1])
+  
+  folder <- gsub("(.+?)(\\/.*)", "\\1", files)
+  
+  return(folder)
 })
 
 read_log <- reactive({
@@ -309,16 +324,13 @@ Col {.tabset}
 
 ### Overview
 
-**Welcome**
+Welcome to the [Centre for Marine Applied Research](https://cmar.ca/)'s (CMAR) Sensor Validation App. The app provides a user interface to validate the calibration of sensors deployed as part of CMAR's [Coastal Monitoring Program](https://cmar.ca/coastal-monitoring-program/).
 
-Welcome to the [Centre for Marine Applied Research](https://cmar.ca/)'s (CMAR) Calibration-Validation App. The app provides a user interface to validate the calibration of sensors deployed as part of CMAR's [Coastal Monitoring Program](https://cmar.ca/coastal-monitoring-program/).
+The full Validation procedure is outlined in [CMAR's Sensor Validation Reference Sheet]().
 
-**Data Collection**
+Please follow the instructions in the tabs above to generate the validation results.
 
-**Validation Procedures**
-
-**Deployment Data**
-
+**Pay close attention the file format, folder structure, and metadata requirements, or else the app WILL NOT run as intended.** 
 
 ### **Step 1: Upload Zipped Data**
 
@@ -329,7 +341,7 @@ The data from a single validation test **must** be saved in a specific format an
 - The .csv files downloaded from aquameasure sensors must be saved in a folder named "aquameasure".
 - The .csv files offloaded from VR2AR and VR2AR-X sensors must be saved in a folder named "vemco".
 
-A deployment log with metadata about the validation must be saved in a folder called "log". The log must include a row for each sensor validated and the following columns:
+A metadata log with information about the validation must be saved in a folder called "log". The log must include a row for each sensor validated and the following columns:
 
 - **deployment_date**: the date the validation test started, in ISO-8601 format, i.e. yyyy-mm-dd. Example: 2025-03-07. This must be the same for each row.
 - **retrieval_date**: the date the validation test ended, in ISO-8601 format, i.e. yyyy-mm-dd. Example: 2025-03-10. This must be the same for each row.
@@ -358,9 +370,9 @@ After the data has been compiled, the tabs in the Compiled Data page will be pop
 - **Data**: a table of compiled data. 
   - Search in the table using the "Search" bar.
   - Reorder the rows based on any column using the arrow in the column header.
-  - Copy or download a csv of the data using the buttons in the top left.
+  - Copy or download a csv of the data using the buttons in the top left. 
 - **Log**: a copy of the log in the zip folder.
-- **Uploaded Files**: a printout of the files found in the .zip folder. 
+- **Uploaded Files**: a printout of the files found in the zip folder. 
 
 See **Step 3: Trim Data** for explanation of the Timestamp inputs, Trim button, and "Print Timestamp" panel.
 
@@ -408,6 +420,18 @@ As with the other tables in the app:
   - Copy or download a csv of the data using the buttons in the top left.
 
   
+### Note
+
+**Deployment Data**
+This app was developed to review Validation data; however, it is possible to upload data from a sensor string deployment. To do so:
+
+  - In the "Select Data Type" dropdown, choose "Deployment". This will colour the figures by sensor depth instead of serial number. 
+  - Ensure the metadata log has the required columns (e.g. sensor_depth_m).
+
+Note that it may take several minutes for the data to compile, with little feedback. Additionally, the interactive figures will slow to react to hover and zoom commands.
+
+A separate app is being developed to work more conveniently with deployment data.
+
 Compiled Data {data-orientation=rows data-icon="fa-table"}
 =======================================
 
@@ -456,12 +480,26 @@ renderDT({
   validate(need(input$compile, "No data to plot"))
   req(input$data_type)
   
+  download_name <- paste0(get_folder_name(), "_compiled")
+  
   compile_data() %>% 
     mutate(timestamp_utc = format(timestamp_utc)) %>% 
     datatable(
+      rownames = FALSE,
       extensions = 'Buttons',
-      options = dt_options,
-      rownames = FALSE)
+      options = list(
+        dom = 'Bft',
+        paging = FALSE,
+        searching = TRUE,
+        scrollY = "500px",
+        scrollX = "500px",
+        buttons = list(
+          list(extend = 'copy', title = download_name), 
+          list(extend = 'csv', title = download_name) 
+        ),
+        columnDefs = list(list(className = 'dt-center', targets = "_all"))
+      )
+    )
 })
 ```
 
@@ -541,12 +579,25 @@ renderPlotly({
 renderDT({
   validate(need(input$apply_trim, "No trimmed data"))
 
+  download_name <- paste0(get_folder_name(), "_trimmed")
+  
   trim_data() %>%
     mutate(timestamp_utc = format(timestamp_utc)) %>% 
     datatable(
+      rownames = FALSE,
       extensions = 'Buttons',
-      options = dt_options,
-      rownames = FALSE
+      options = list(
+        dom = 'Bft',
+        paging = FALSE,
+        searching = TRUE,
+        scrollY = "500px",
+        scrollX = "500px",
+        buttons = list(
+          list(extend = 'copy', title = download_name), 
+          list(extend = 'csv', title = download_name) 
+        ),
+        columnDefs = list(list(className = 'dt-center', targets = "_all"))
+      )
     )
 })
 ```
@@ -609,8 +660,7 @@ renderPlotly({
         format = "png",
         filename = "dissolved_oxygen_percent_saturation_validation",
         width = 900, height = 500
-      ))  #%>%
-  #layout(margin = list(b = 90, l = 90))
+      ))  
 })
 
 ``` 
@@ -649,6 +699,8 @@ renderDT({
   validate(need(input$apply_trim, "No validation data to show"))
   validate(need(input$data_type == "Validation", "No validation data to show. Please choose 'Validation' from the 'Select Data Type' dropdown"))
   validate(need(input$apply_val, "No validation data to show. Please click the 'Validate' button"))
+  
+  download_name <- paste0(get_folder_name(), "_validation_data")
 
   val_data() %>%
     select(-deployment_range) %>% 
@@ -660,9 +712,20 @@ renderDT({
       tol_upper = round(tol_upper, digits = 2)
     ) %>% 
     datatable(
+      rownames = FALSE,
       extensions = 'Buttons',
-      options = dt_options,
-      rownames = FALSE
+      options = list(
+        dom = 'Bft',
+        paging = FALSE,
+        searching = TRUE,
+        scrollY = "500px",
+        scrollX = "500px",
+        buttons = list(
+          list(extend = 'copy', title = download_name), 
+          list(extend = 'csv', title = download_name) 
+        ),
+        columnDefs = list(list(className = 'dt-center', targets = "_all"))
+      )
     )
 })
 ```
@@ -675,16 +738,29 @@ renderDT({
   validate(need(input$data_type == "Validation", "No validation results to show. Please choose 'Validation' from the 'Select Data Type' dropdown"))
   validate(need(input$apply_val, "No validation results to show. Please click the 'Validate' button"))
   
+  download_name <- paste0(get_folder_name(), "_validation_results")
+  
   val_data() %>% 
     cv_summarise_flags(dt = FALSE)  %>% 
-     mutate(
+    mutate(
       percent_pass = round(percent_pass, digits = 2),
       percent_fail = round(percent_fail, digits = 2)
     ) %>% 
     datatable(
+      rownames = FALSE,
       extensions = 'Buttons',
-      options = dt_options, 
-      rownames = FALSE
+      options = list(
+        dom = 'Bft',
+        paging = FALSE,
+        searching = TRUE,
+        scrollY = "500px",
+        scrollX = "500px",
+        buttons = list(
+          list(extend = 'copy', title = download_name), 
+          list(extend = 'csv', title = download_name) 
+        ),
+        columnDefs = list(list(className = 'dt-center', targets = "_all"))
+      )
     )
 })
 ```
