@@ -780,7 +780,7 @@ renderDT({
         dom = 'Bft',
         paging = FALSE,
         searching = TRUE,
-       # scrollY = "500px",
+        scrollY = "800px",
         scrollX = "500px",
         buttons = list(
           list(extend = 'copy', title = download_name), 
@@ -815,7 +815,7 @@ renderDT({
         dom = 'Bft',
         paging = FALSE,
         searching = TRUE,
-       # scrollY = "500px",
+        scrollY = "800px",
         scrollX = "500px",
         buttons = list(
           list(extend = 'copy', title = download_name), 
