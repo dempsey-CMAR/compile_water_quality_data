@@ -1,0 +1,529 @@
+---
+title: "CMAR CMP Data Processing App"
+date: "version 0.0.9000"
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+runtime: shiny
+---
+
+```{r setup, echo=FALSE, include=FALSE}
+
+library(calval)
+library(data.table)
+library(dplyr)
+library(DT)
+library(ggplot2)
+library(here)
+library(leaflet)
+library(lubridate)
+library(plotly)
+library(readr)
+library(sensorstrings)
+library(shiny)
+library(stringr)
+library(tidyr)
+
+```
+
+
+
+```{r}
+#########################################
+###### Reactive UI ###################### 
+#########################################
+
+button_style <- "color: #fff; background-color: #063e4d; border-color: #063e4d"
+
+output$clear_button <- renderUI({
+   actionButton(
+    "clear_data", "Refresh App", icon("arrows-rotate"),
+    width = '100%'
+  )
+})
+
+output$compile_button <- renderUI({
+  req(input$upload)
+  
+  actionButton(
+    "compile", "Compile Data", 
+    width = '100%',
+    style = button_style,
+    onclick = "location.href='#section-preview';")
+})
+
+output$trim_start <- renderUI({
+  dat <- compile_data()
+  textInput(
+    "ts_start", "First Good Timestamp",
+    value = min(dat$timestamp_utc),
+    width = '100%',
+    placeholder = "yyyy-mm-dd hh:mm:ss"
+  )
+})
+
+output$trim_end <- renderUI({
+  dat <- compile_data()
+  textInput(
+    "ts_end", "Last Good Timestamp",
+    value = max(dat$timestamp_utc),
+    width = '100%',
+    placeholder = "yyyy-mm-dd hh:mm:ss"
+  )
+})
+
+output$trim_button <- renderUI({
+  req(input$compile)
+  actionButton(
+    "apply_trim", 
+    "Trim Data", 
+    width = '100%',
+    style = button_style,
+    onclick = "location.href='#section-trimmed-data';")
+})
+
+output$download_button <- renderUI({
+  req(input$apply_trim)
+  
+  downloadButton(
+    "download_data", 
+    "Download Data",
+    style = paste0(button_style, "; width: 100%;")
+  )
+})
+
+output$download_data <- downloadHandler(
+  filename = function() {
+    paste0(get_folder_name(), ".csv")
+  },
+  content = function(file) {
+    fwrite(
+      trim_data() %>% 
+        mutate(timestamp_utc = format(timestamp_utc)), file)
+  }
+)
+
+#########################################
+###### Data Wrangling ################### 
+#########################################
+
+get_files <- reactive({
+  req(input$upload)
+  
+  files <- unzip(input$upload$datapath, list = FALSE)
+  
+  validate(need(length(files) > 0, "No csv files found in zipped folder"))
+ 
+  files <- files[grep(".csv|.xlsx", files)]
+  files <- files[grep("other_vemco", files, invert = TRUE)]
+  
+  return(files)
+})
+
+get_folder_name <- reactive({
+  req(input$upload)
+
+  files <- get_files()
+
+  files <- sub("./", "", files[1])
+
+  folder <- gsub("(.+?)(\\/.*)", "\\1", files)
+
+  return(folder)
+})
+
+read_log <- reactive({
+  req(input$upload)
+  
+  zip_files <- get_files()
+  path <- zip_files[grep("log", zip_files)]
+  
+  ss_log <- ss_read_log(path, parse = FALSE, verbose = FALSE)
+  
+  return(ss_log)
+})
+
+compile_data <- eventReactive(input$compile, {
+  
+  zip_files <- get_files()
+  
+  depl_log <- read_log() %>% ss_parse_log(verbose = FALSE)
+  depl_dates <- depl_log$deployment_dates
+  sn_table <- depl_log$sn_table
+  
+  depl_data <- tibble(NULL)
+  
+  sn_am <- sn_table %>%
+    filter(str_detect(log_sensor, regex("aquameasure", ignore_case = TRUE)))
+  if(nrow(sn_am) > 0) {
+    am <- ss_compile_aquameasure_data(
+      path = zip_files[grep("aquameasure", zip_files)],
+      sn_table = sn_table,
+      deployment_dates = depl_dates,
+      trim = TRUE
+    )
+    depl_data <- bind_rows(depl_data, am)
+  }
+  
+  sn_hobo <- sn_table %>%
+    filter(str_detect(log_sensor, regex("hobo", ignore_case = TRUE)))
+  if(nrow(sn_hobo) > 0) {
+    hobo <- ss_compile_hobo_data(
+      path = zip_files[grep("hobo", zip_files)],
+      sn_table = sn_table,
+      deployment_dates = depl_dates,
+      trim = TRUE
+    )
+    depl_data <- bind_rows(depl_data, hobo)
+  }
+  
+  sn_tidbit <- sn_table %>%
+    filter(str_detect(log_sensor, regex("tidbit", ignore_case = TRUE)))
+  if (nrow(sn_tidbit) > 0) {
+    tidbit <- ss_compile_hobo_data(
+      path = zip_files[grep("tidbit", zip_files)],
+      sn_table = sn_tidbit,
+      deployment_dates = depl_dates,
+      trim = TRUE,
+      sensor_make = "tidbit"
+    )
+    depl_data <- bind_rows(depl_data, tidbit)
+  }
+  
+  sn_vem <- sn_table %>%
+    filter(str_detect(log_sensor, regex("VR2AR", ignore_case = TRUE)))
+  if (nrow(sn_vem) > 0) {
+    vemco <- ss_compile_vemco_data(
+      path = zip_files[grep("vemco", zip_files)],
+      sn_table = sn_vem,
+      deployment_dates = depl_dates,
+      trim = TRUE
+    )
+    depl_data <- bind_rows(depl_data, vemco)
+  }
+  
+  return(depl_data)
+})
+
+
+observeEvent(input$compile, {
+  showModal(
+    modalDialog(
+      "Compiling data. This may take several minutes",
+      easyClose = TRUE
+    ))
+})  
+
+observeEvent(input$apply_trim, {
+  showModal(
+    modalDialog(
+      "Plotting data. This may take several minutes",
+      easyClose = TRUE
+    ))
+})  
+
+
+trim_data <- eventReactive(input$apply_trim, {
+  ts_min <- as_datetime(input$ts_start)
+  ts_max <- as_datetime(input$ts_end)
+  
+  validate(need(!is.na(ts_min), "Fix Timestamp: the timestamp entered into the First Good Timestamp field must be in the order yyyy-mm-dd hh:mm:ss"))
+  validate(need(!is.na(ts_max), "Fix Timestamp: the timestamp entered into the Last Good Timestamp field must be in the order yyyy-mm-dd hh:mm:ss"))
+  validate(need(ts_max > ts_min, "Fix Timestamps: the timestamp entered in the First Good Timestamp field must occur before the timestamp entered in the Last Good Timestamp field"))
+    
+  dat <- compile_data() %>% 
+    filter(timestamp_utc >= ts_min, timestamp_utc <= ts_max)
+
+  return(dat)
+})
+
+observeEvent(input$clear_data, {
+  session$reload()
+})
+
+#########################################
+###### Figures & Tables ################## 
+#########################################
+
+click_start <- reactive({
+  req(input$compile)
+  
+  ts_info <- event_data("plotly_click", source = "plot1")
+  
+  if (is.null(ts_info)) {
+      "Click a point from the chart above to print its timestamp. Double click the chart to clear."
+  } else {
+    ts_new <- data.frame(ts = as_datetime(ts_info$x))
+    ts_new$ts <- format(ts_new$ts, "%Y-%m-%d %H:%M:%S")
+    
+    ts_new$ts
+  }
+  
+})
+
+click_end <- reactive({
+  req(input$compile)
+  
+  ts_info <- event_data("plotly_click", source = "plot2")
+  
+  if (is.null(ts_info)) {
+      "Click a point from the chart above to print its timestamp. Double click the chart to clear."
+  } else {
+    ts_new <- data.frame(ts = as_datetime(ts_info$x))
+    ts_new$ts <- format(ts_new$ts, "%Y-%m-%d %H:%M:%S")
+    
+    ts_new$ts
+  }
+  
+})
+
+
+
+```
+
+
+Column {.sidebar data-width=350}
+=======================================
+
+```{r}
+uiOutput("clear_button")
+
+fileInput(
+  "upload",
+  "",
+  accept = ".zip",
+  buttonLabel = "Upload Zip Folder",
+  multiple = FALSE,
+  width = '100%'
+)
+
+uiOutput("compile_button")
+HTML("<br>")
+
+uiOutput("trim_start")
+
+uiOutput("trim_end")
+
+uiOutput("trim_button")
+HTML("<br>")
+
+uiOutput("download_button")
+
+```
+
+
+Metadata {data-orientation=rows data-icon="fa-location-dot"}
+=======================================
+
+Col {.tabset}
+-------------------------------------
+
+### Deployment Log
+
+```{r}
+renderDT({
+  read_log() %>%
+    datatable(
+      rownames = FALSE,
+      options = list(
+        dom = 'Bft',
+        paging = FALSE,
+        searching = TRUE,
+        scrollX = "500px",
+        columnDefs = list(list(className = 'dt-center', targets = "_all"))))
+})
+```
+
+### Map
+```{r}
+renderLeaflet({
+  
+  st_location <- read_log() %>% 
+    select(deployment_latitude, deployment_longitude, station) 
+  
+  leaflet(st_location) %>%
+    addProviderTiles(providers$CartoDB.Positron) %>%
+    addCircleMarkers(
+      data = st_location,
+      lng = ~deployment_longitude, 
+      lat = ~deployment_latitude, 
+      label = ~station,
+      weight = 1, fillOpacity = 0.75, radius = 5
+    ) %>%
+    addScaleBar(
+      position = "bottomleft",
+      options = scaleBarOptions(imperial = FALSE)
+    )
+})
+  
+```
+
+### Uploaded Files
+```{r}
+renderPrint({
+  validate(need(input$upload, "No files uploaded"))
+  get_files()
+})
+```
+
+Col {data-height=50}
+-------------------------------------
+### Location Checks
+Might not be needed here.
+
+  - Can visually check whether station was on land
+  - Retrieval coordinates not always included in log
+  - Radius check is specific to CMAR stations
+
+```{r}
+# st_location <- data.frame(
+#   station = depl_station,
+#   latitude = depl_info$deployment_latitude,
+#   longitude = depl_info$deployment_longitude,
+#   retrieval_latitude = depl_info$retrieval_latitude,
+#   retrieval_longitude = depl_info$retrieval_longitude
+# )
+# 
+# #ss_check_station_radius(st_location) # checks against water quality stations
+# ss_check_station_in_ocean(st_location) # slow because reads in shape file
+# ss_check_station_drift(st_location, max_drift = 0)
+
+```
+
+Preview {data-icon="fa-magnifying-glass"}
+=======================================
+
+Col 
+-------------------------------------
+
+### Deployment Start
+```{r}
+output$p_start <- renderPlotly({
+  
+  validate(need(input$compile, "No data to plot"))
+  
+  dat <- compile_data() 
+  
+  p <- dat %>% 
+    filter(timestamp_utc < min(dat$timestamp_utc) + days(2)) %>% 
+    ss_ggplot_variables(
+      point_size = 1, axis_label_newline = FALSE
+    )
+  
+  p <- ggplotly(p, tooltip = "text", source = "plot1") %>%
+    config(
+      modeBarButtonsToRemove = list("toggleSpikelines", "autoScale2d"),
+      displaylogo = FALSE,
+      toImageButtonOptions = list(
+        format = "png",
+        filename = "deployment_start",
+        width = 900, height = 500
+      )) 
+  p
+})
+
+plotlyOutput("p_start")
+
+```
+
+### Deployment End
+```{r}
+output$p_end <- renderPlotly({
+  
+  validate(need(input$compile, "No data to plot"))
+  
+  dat <- compile_data() 
+  
+  p <- dat %>% 
+    filter(timestamp_utc > max(dat$timestamp_utc) - days(2)) %>% 
+    ss_ggplot_variables(
+      point_size = 1, axis_label_newline = FALSE
+    )
+  
+  p <- ggplotly(p, tooltip = "text", source = "plot2") %>%
+    config(
+      modeBarButtonsToRemove = list("toggleSpikelines", "autoScale2d"),
+      displaylogo = FALSE,
+      toImageButtonOptions = list(
+        format = "png",
+        filename = "deployment_end",
+        width = 900, height = 500
+      ))  
+  
+  p
+})
+
+plotlyOutput("p_end")
+
+```
+
+
+Col {data-height=50}
+-------------------------------------
+
+### Print Start Timestamp
+```{r}
+renderText(click_start())
+```
+
+### Print End Timestamp
+```{r}
+renderText(click_end())
+```
+
+
+Trimmed Data {data-orientation=rows data-icon="fa-scissors"}
+=======================================
+
+Col {.tabset}
+-------------------------------------
+
+### Trimmed Data 
+```{r}
+
+output$p_trim <- renderPlot({
+  validate(need(input$apply_trim, "No trimmed data to plot"))
+  
+  dat <- trim_data()
+  
+  p <- ss_ggplot_variables(
+    dat, axis_label_newline = FALSE, superchill = FALSE
+  ) +
+    theme(
+      text = element_text(size = 16),
+      strip.text = element_text(colour = "black", size = 16)
+    )
+  
+  p
+})
+
+plotOutput("p_trim")
+
+```
+
+### Data 
+```{r}
+renderDT({
+  validate(need(input$apply_trim, "No trimmed data"))
+  
+  download_name <- paste0(get_folder_name(), "_trimmed")
+  
+  trim_data() %>%
+    mutate(timestamp_utc = format(timestamp_utc)) %>% 
+    datatable(
+      rownames = FALSE,
+      options = list(
+        dom = 'ftpli',
+        paging = TRUE,
+        searching = TRUE,
+        scrollX = "500px",
+        columnDefs = list(list(className = 'dt-center', targets = "_all"))
+      )
+    )
+})
+```
+
+
+
+
+
