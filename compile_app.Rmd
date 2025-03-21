@@ -7,6 +7,27 @@ output:
 runtime: shiny
 ---
 
+<style type="text/css">
+  body {font-size: 16px;}
+</style>
+
+<style>
+  .nav-tabs-custom > .nav-tabs > li.active {border-top-color: #063e4d}
+</style>
+
+<style>
+.nav-tabs-custom .nav-tabs li.active a {
+  color: #063e4d;
+  font-size: 16px;
+}
+
+.nav-tabs-custom .nav-tabs li:not(.active) a {
+  color: grey;
+  font-size: 16px;
+}
+</style>
+
+
 ```{r setup, echo=FALSE, include=FALSE}
 
 library(calval)
@@ -26,8 +47,6 @@ library(tidyr)
 
 ```
 
-
-
 ```{r}
 #########################################
 ###### Reactive UI ###################### 
@@ -38,6 +57,7 @@ button_style <- "color: #fff; background-color: #063e4d; border-color: #063e4d"
 output$clear_button <- renderUI({
    actionButton(
     "clear_data", "Refresh App", icon("arrows-rotate"),
+    style = button_style,
     width = '100%'
   )
 })
@@ -50,6 +70,16 @@ output$compile_button <- renderUI({
     width = '100%',
     style = button_style,
     onclick = "location.href='#section-preview';")
+})
+
+output$preview_button <- renderUI({
+  req(input$upload)
+  
+  textInput(
+    "preview_window",
+    "Preview Window (days)",
+    value = 2, width = '50%'
+  )
 })
 
 output$trim_start <- renderUI({
@@ -277,8 +307,6 @@ click_end <- reactive({
   
 })
 
-
-
 ```
 
 
@@ -300,6 +328,8 @@ fileInput(
 uiOutput("compile_button")
 HTML("<br>")
 
+uiOutput("preview_button")
+
 uiOutput("trim_start")
 
 uiOutput("trim_end")
@@ -311,63 +341,96 @@ uiOutput("download_button")
 
 ```
 
-
-Metadata {data-orientation=rows data-icon="fa-location-dot"}
+Instructions {data-icon="fa-circle-info"}
 =======================================
 
 Col {.tabset}
 -------------------------------------
 
-### Deployment Log
+### Overview
 
-```{r}
-renderDT({
-  read_log() %>%
-    datatable(
-      rownames = FALSE,
-      options = list(
-        dom = 'Bft',
-        paging = FALSE,
-        searching = TRUE,
-        scrollX = "500px",
-        columnDefs = list(list(className = 'dt-center', targets = "_all"))))
-})
-```
+Welcome to the [Centre for Marine Applied Research](https://cmar.ca/)'s (CMAR) Data Processing App. 
 
-### Map
-```{r}
-renderLeaflet({
+The app provides a user interface to compile and trim data collected through the Water Quality Branch of CMAR's [Coastal Monitoring Program](https://cmar.ca/coastal-monitoring-program/).
+
+Please follow the instructions in the tabs above to generate the validation results.
+
+**Pay close attention the file format, folder structure, and metadata requirements, or else the app WILL NOT run as intended.** 
+
+### **Step 1: Upload Zipped Data**
+
+The data from a single deployment **must** be saved in a specific format and folder structure for the app to access.
+
+- A separate data file must be offloaded from each sensor and saved in .csv format.
+- The .csv files offloaded from hobo and tidbit sensors must be saved in a folder called "hobo" and named with the sensor serial number.
+- The .csv files downloaded from aquameasure sensors must be saved in a folder named "aquameasure".
+- The .csv files offloaded from VR2AR and VR2AR-X sensors must be saved in a folder named "vemco".
+
+A metadata log with information about the deployment must be saved in a folder called "log". The log must include a row for each sensor and the following columns:
+
+- **deployment_date**: the date the deployment started, in ISO-8601 format, i.e. yyyy-mm-dd. Example: 2025-03-07. This must be the same for each row.
+- **retrieval_date**: the date the deployment ended, in ISO-8601 format, i.e. yyyy-mm-dd. Example: 2025-03-10. This must be the same for each row.
+- **deployment_latitude**: the latitude of the deployed sensors. Must be the same for each row.
+- **deployment_longitude**: the longitude of the deployed sensors. Must be the same for each row.
+- **sensor_type**: the manufacturer of the sensor. Entries must include "aquameasure", "hobo", "tidbit", or "vr2ar". Example: "aquaMeasure DOT", "HOBO Pro V2".
+- **sensor_serial_number**: serial number of the sensor.
+- **sensor_depth_at_low_tide_m**: the estimated depth of the sensor at low tide, in units of metres.
+
+The aquameasure, hobo, tidbit, vemco, and/or log folders must all be saved in the same folder (e.g., validation_data). This folder must be saved as a zip file and may be uploaded to the app using the "Upload Zip File" button.
+
+### **Step 2: Compile Data**
+
+After the zip file with the validation data has been successfully uploaded, a "Compile Data" button and "Preview Window (days)" will appear in the sidebar.
+
+Several things happen When the "Compile Data" button is clicked:
+
+1. The app will automatically open the "Preview" page.
+2. A popup message will appear to signal that the data is being compiled.
+3. Behind the scenes, the data from the different sensors will be compiled into a single data frame with additional metadata columns. Depending on the size of the data files, this could take a few minutes with little feedback. Be patient.
+4. Additional input boxes and the "Trim Data" button will appear in the sidebar.
+
+After the data has been compiled, the Deployment Start and Deployment End figures will be generated. These are interactive figures displaying the data from the beginning or end of the deployment, coloured by sensor_depth_at_low_tide_m. The "Preview Window (days)" input controls how many days of data are plotted. The default (2 days) should be sufficient for most applications, but can be adjusted to provide more context.
+
+- Hover over points to see information including the timestamp, measurement value, sensor type, and sensor serial number. 
+- Click on entries in the legend to add/remove data series. 
+- Click and drag to zoom in on interesting features.
+- Download image by clicking the camera icon that appears in the top right of the figure.  
+
+See **Step 3: Trim Data** for explanation of the input boxes, Trim button, and "Print Timestamp" panels.
+
+### **Step 3: Trim Data**
+
+The compiled data may include observations from before or after the deployment that should not be included in the downloaded data. These can be trimmed out of the dataset in this step.
+
+Use the Deployment Start figure to identify the timestamp of the first "Good" observation, i.e., the first data point that should be included. It may be helpful to zoom in on the figure to do so. Double click to zoom back out. Clicking a data point will print its timestamp to the "Print Start Timestamp" panel. This can be copied and pasted into the "First Good Timestamp" text box in the side bar. Adjust the "Preview Window (days)" to show more or less days of data if required.
+
+Use the Deployment End figure to find the last good observation, and paste its timestamp in the "Last Good Timestamp" text box.
+
+Click the "Trim Data" button. This will remove the observations before/after the first and last good observation. The "Trimmed Data" page will open and the tabs will be populated:
+
+- **Figure**: a static figure displaying the data from all sensors in the validation trimmed to the specified dates and coloured by sensor_depth_at_low_tide_m.
+- **Data**: a table of trimmed data. 
+  - Search in the table using the "Search" bar.
+  - Reorder the rows based on any column using the arrow in the column header.
   
-  st_location <- read_log() %>% 
-    select(deployment_latitude, deployment_longitude, station) 
-  
-  leaflet(st_location) %>%
-    addProviderTiles(providers$CartoDB.Positron) %>%
-    addCircleMarkers(
-      data = st_location,
-      lng = ~deployment_longitude, 
-      lat = ~deployment_latitude, 
-      label = ~station,
-      weight = 1, fillOpacity = 0.75, radius = 5
-    ) %>%
-    addScaleBar(
-      position = "bottomleft",
-      options = scaleBarOptions(imperial = FALSE)
-    )
-})
-  
-```
+### **Step 4: Download Data**
 
-### Uploaded Files
-```{r}
-renderPrint({
-  validate(need(input$upload, "No files uploaded"))
-  get_files()
-})
-```
+After the "Trim Data" button is clicked, a "Download Data" button will appear.
 
-Col {data-height=50}
+Click this to download the trimmed dataset. The file will be in a csv format and named after the original zip folder.
+
+
+Metadata {data-orientation=rows data-icon="fa-location-dot"}
+=======================================
+
+Col {.tabset data-height=100}
 -------------------------------------
+
+### Notes
+- The Deployment Log tab displays the deployment metadata, as read in from the the log file.
+- The Map tab shows the deployment location, based on deployment_latitude and deployment_longitude entered in the log.
+- The Uploaded Files tab lists the files that were uploaded from the zip folder.
+
 ### Location Checks
 Might not be needed here.
 
@@ -390,6 +453,59 @@ Might not be needed here.
 
 ```
 
+
+Col {.tabset}
+-------------------------------------
+
+### Deployment Log
+
+```{r}
+renderDT({
+  read_log() %>%
+    datatable(
+      rownames = FALSE,
+      options = list(
+        dom = 'Bft',
+        paging = FALSE,
+        searching = TRUE,
+        scrollX = "500px",
+        columnDefs = list(list(className = 'dt-center', targets = "_all"))))
+})
+```
+
+### Map
+```{r}
+output$st_map <- renderLeaflet({
+  
+  st_location <- read_log() %>% 
+    select(deployment_latitude, deployment_longitude, station) 
+  
+  leaflet(st_location) %>%
+    addProviderTiles(providers$CartoDB.Positron) %>%
+    addCircleMarkers(
+      data = st_location,
+      lng = ~deployment_longitude, 
+      lat = ~deployment_latitude, 
+      label = ~station,
+      weight = 1, fillOpacity = 0.75, radius = 5
+    ) %>%
+    addScaleBar(
+      position = "bottomleft",
+      options = scaleBarOptions(imperial = FALSE)
+    )
+})
+
+leafletOutput("st_map")  
+```
+
+### Uploaded Files
+```{r}
+renderPrint({
+  validate(need(input$upload, "No files uploaded"))
+  get_files()
+})
+```
+
 Preview {data-icon="fa-magnifying-glass"}
 =======================================
 
@@ -399,13 +515,17 @@ Col
 ### Deployment Start
 ```{r}
 output$p_start <- renderPlotly({
-  
+  req(input$preview_window)
   validate(need(input$compile, "No data to plot"))
+  
+  n_days <- as.numeric(input$preview_window)
+  
+  validate(need(!is.na(n_days), "Problem with the Preview Window. Please enter a numeric value."))
   
   dat <- compile_data() 
   
   p <- dat %>% 
-    filter(timestamp_utc < min(dat$timestamp_utc) + days(2)) %>% 
+    filter(timestamp_utc < min(dat$timestamp_utc) + days(n_days)) %>% 
     ss_ggplot_variables(
       point_size = 1, axis_label_newline = FALSE
     )
@@ -432,10 +552,14 @@ output$p_end <- renderPlotly({
   
   validate(need(input$compile, "No data to plot"))
   
+  n_days <- as.numeric(input$preview_window)
+  
+  validate(need(!is.na(n_days), "Problem with the Preview Window. Please enter a numeric value."))
+  
   dat <- compile_data() 
   
   p <- dat %>% 
-    filter(timestamp_utc > max(dat$timestamp_utc) - days(2)) %>% 
+    filter(timestamp_utc > max(dat$timestamp_utc) - days(n_days)) %>% 
     ss_ggplot_variables(
       point_size = 1, axis_label_newline = FALSE
     )
@@ -449,7 +573,7 @@ output$p_end <- renderPlotly({
         filename = "deployment_end",
         width = 900, height = 500
       ))  
-  
+
   p
 })
 
@@ -491,7 +615,9 @@ output$p_trim <- renderPlot({
   ) +
     theme(
       text = element_text(size = 16),
-      strip.text = element_text(colour = "black", size = 16)
+      strip.text = element_text(colour = "black", size = 16),
+      legend.text = element_text(size = 16),
+      legend.key.height = unit(1.5, "cm")
     )
   
   p

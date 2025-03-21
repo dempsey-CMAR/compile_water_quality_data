@@ -11,6 +11,22 @@ runtime: shiny
   body {font-size: 16px;}
 </style>
 
+<style>
+  .nav-tabs-custom > .nav-tabs > li.active {border-top-color: #063e4d}
+</style>
+
+<style>
+.nav-tabs-custom .nav-tabs li.active a {
+  color: #063e4d;
+  font-size: 16px;
+}
+
+.nav-tabs-custom .nav-tabs li:not(.active) a {
+  color: grey;
+  font-size: 16px;
+}
+</style>
+
 
 ```{r setup, echo=FALSE, include=FALSE}
 
@@ -24,7 +40,6 @@ library(plotly)
 library(readr)
 library(sensorstrings)
 library(shiny)
-#library(shinyjs)
 library(stringr)
 library(tidyr)
 
@@ -91,9 +106,7 @@ output$val_button <- renderUI({
 })
 
 output$clear_button <- renderUI({
- # req(input$upload)
- 
-  actionButton(
+   actionButton(
     "clear_data", "Refresh App", icon("arrows-rotate"),
     width = '100%'
   )
@@ -105,8 +118,12 @@ output$clear_button <- renderUI({
 
 get_files <- reactive({
   req(input$upload)
+  
   files <- unzip(input$upload$datapath, list = FALSE)
-  files <- files[grep(".csv", files)]
+  
+  validate(need(length(files) > 0, "No csv files found in zipped folder"))
+  
+  files <- files[grep(".csv|.xlsx", files)]
   files <- files[grep("other_vemco", files, invert = TRUE)]
   
   return(files)
@@ -347,7 +364,7 @@ fileInput(
   "upload",
   "",
   accept = ".zip",
-  buttonLabel = "Upload Zip File",
+  buttonLabel = "Upload Zip Folder",
   multiple = FALSE,
   width = '100%'
 )
@@ -403,7 +420,7 @@ The aquameasure, hobo, tidbit, vemco, and/or log folders must all be saved in th
 
 ### **Step 2: Compile Data**
 
-After the zip file with the validation data has been successfully uploaded, a "Compile Data" button will appear in the sideboard.
+After the zip file with the validation data has been successfully uploaded, a "Compile Data" button will appear in the sidebar.
 
 Several things happen When this button is clicked:
 1. The app will automatically open the "Compiled Data" page.
@@ -515,8 +532,8 @@ output$p_raw <- renderPlotly({
         format = "png",
         filename = "temperature_validation",
         width = 900, height = 500
-      ))  %>%
-    layout(margin = list(b = 90, l = 90))
+      ))  #%>%
+  #  layout(margin = list(b = 90, l = 90))
   
   p
 })
@@ -620,8 +637,8 @@ output$p_trim <- renderPlotly({
         format = "png",
         filename = "temperature_validation",
         width = 900, height = 500
-      ))  %>%
-    layout(margin = list(b = 90, l = 90))
+      ))  #%>%
+   # layout(margin = list(b = 90, l = 90))
 
   p
 })
@@ -692,8 +709,8 @@ renderPlotly({
         format = "png",
         filename = "temperature_validation",
         width = 900, height = 500
-      ))  %>%
-    layout(margin = list(b = 90, l = 90))
+      )) # %>%
+  #  layout(margin = list(b = 90, l = 90))
 })
 
 ```
