@@ -29,8 +29,6 @@ runtime: shiny
 
 
 ```{r setup, echo=FALSE, include=FALSE}
-
-library(calval)
 library(data.table)
 library(dplyr)
 library(DT)
@@ -353,7 +351,7 @@ Welcome to the [Centre for Marine Applied Research](https://cmar.ca/)'s (CMAR) D
 
 The app provides a user interface to compile and trim data collected through the Water Quality Branch of CMAR's [Coastal Monitoring Program](https://cmar.ca/coastal-monitoring-program/).
 
-Please follow the instructions in the tabs above to generate the validation results.
+Please follow the instructions in the tabs above to compile the data.
 
 **Pay close attention the file format, folder structure, and metadata requirements, or else the app WILL NOT run as intended.** 
 
@@ -370,8 +368,8 @@ A metadata log with information about the deployment must be saved in a folder c
 
 - **deployment_date**: the date the deployment started, in ISO-8601 format, i.e. yyyy-mm-dd. Example: 2025-03-07. This must be the same for each row.
 - **retrieval_date**: the date the deployment ended, in ISO-8601 format, i.e. yyyy-mm-dd. Example: 2025-03-10. This must be the same for each row.
-- **deployment_latitude**: the latitude of the deployed sensors. Must be the same for each row.
-- **deployment_longitude**: the longitude of the deployed sensors. Must be the same for each row.
+- **deployment_latitude**: the latitude of the deployed sensors (in decimal-degrees). Must be the same for each row.
+- **deployment_longitude**: the longitude of the deployed sensors (in decimal-degrees). Must be the same for each row.
 - **sensor_type**: the manufacturer of the sensor. Entries must include "aquameasure", "hobo", "tidbit", or "vr2ar". Example: "aquaMeasure DOT", "HOBO Pro V2".
 - **sensor_serial_number**: serial number of the sensor.
 - **sensor_depth_at_low_tide_m**: the estimated depth of the sensor at low tide, in units of metres.
@@ -381,6 +379,8 @@ The aquameasure, hobo, tidbit, vemco, and/or log folders must all be saved in th
 ### **Step 2: Compile Data**
 
 After the zip file with the validation data has been successfully uploaded, a "Compile Data" button and "Preview Window (days)" will appear in the sidebar.
+
+**Note**: for some reason, the first time the "Compile" button is clicked, the App will refresh. You will need to re-upload the zip folder and click "Compile" again.
 
 Several things happen When the "Compile Data" button is clicked:
 
@@ -431,12 +431,6 @@ Col {.tabset data-height=100}
 - The Map tab shows the deployment location, based on deployment_latitude and deployment_longitude entered in the log.
 - The Uploaded Files tab lists the files that were uploaded from the zip folder.
 
-### Location Checks
-Might not be needed here.
-
-  - Can visually check whether station was on land
-  - Retrieval coordinates not always included in log
-  - Radius check is specific to CMAR stations
 
 ```{r}
 # st_location <- data.frame(
@@ -460,14 +454,17 @@ Col {.tabset}
 ### Deployment Log
 
 ```{r}
-renderDT({
+# renderDataTable is deprecated for renderDT
+# BUT renderDT does not add scroll bars to the table
+renderDataTable({
   read_log() %>%
     datatable(
       rownames = FALSE,
       options = list(
-        dom = 'Bft',
+        dom = 'ft',
         paging = FALSE,
         searching = TRUE,
+        fillContainer = TRUE,
         scrollX = "500px",
         columnDefs = list(list(className = 'dt-center', targets = "_all"))))
 })
@@ -629,7 +626,7 @@ plotOutput("p_trim")
 
 ### Data 
 ```{r}
-renderDT({
+renderDataTable({
   validate(need(input$apply_trim, "No trimmed data"))
   
   download_name <- paste0(get_folder_name(), "_trimmed")
@@ -639,10 +636,13 @@ renderDT({
     datatable(
       rownames = FALSE,
       options = list(
-        dom = 'ftpli',
+         dom = 'ftpl',
+        #dom = 'ftpli',
+        #dom = 'ft',
         paging = TRUE,
         searching = TRUE,
         scrollX = "500px",
+        fillContainer = TRUE,
         columnDefs = list(list(className = 'dt-center', targets = "_all"))
       )
     )
