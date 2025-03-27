@@ -96,7 +96,6 @@ output$trim_button <- renderUI({
 output$val_button <- renderUI({
   req(input$compile)
   req(input$apply_trim)
-  req(input$data_type == "Validation")
   
   actionButton(
     "apply_val", "Validate", 
@@ -153,8 +152,7 @@ read_log <- reactive({
 })
 
 compile_data <- eventReactive(input$compile, {
-  req(input$data_type)
-  
+ 
   zip_files <- get_files()
   
   depl_log <- read_log() %>% ss_parse_log(verbose = FALSE)
@@ -212,10 +210,10 @@ compile_data <- eventReactive(input$compile, {
     depl_data <- bind_rows(depl_data, vemco)
   }
   
-  if(input$data_type == "Validation") {
-    depl_data <- depl_data %>% 
-      select(-contains("sensor_depth"))
-  }
+  
+  depl_data <- depl_data %>% 
+    select(-contains("sensor_depth"))
+  
   
   return(depl_data)
 })
@@ -255,24 +253,7 @@ val_data <- eventReactive(input$apply_val, {
 })
 
 
-# useShinyjs(rmd = TRUE)
-observeEvent(input$clear_data, {
-
-  session$reload()
-  
-  # #unlink(input$upload$datapath)
-  # shinyjs::reset(id = "")
-  # 
-  # output$compile_button <- NULL
-  # output$trim_start <- NULL
-  # output$trim_end <- NULL
-  # output$trim_button <- NULL
-  # output$val_button <- NULL
-  # 
-  # output$p_raw <- NULL
-  # output$p_trim <- NULL
-
-})
+observeEvent(input$clear_data, { session$reload() })
 
 #########################################
 ###### Figures & Tables ################## 
@@ -309,28 +290,6 @@ ts_click_trim <- reactive({
   }
 })
 
-customize_fig <- reactive({
-  req(input$data_type)
-
-  if(input$data_type == "Validation") {
-    point_col <- "sensor_serial_number"
-    point_size <- 1
-    legend_name <- "Serial Number"
-  }
-  if(input$data_type == "Deployment") {
-    point_col <- "sensor_depth_at_low_tide_m"
-    point_size <- 0.25
-    legend_name <- "Depth (m)"
-  }
-
-  return(data.frame(
-    point_col = point_col, 
-    point_size = point_size,
-    legend_name = legend_name
-  ))
-  
-})
-
 
 plot_data_sn <- reactive({
   dat <- val_data() %>% 
@@ -349,16 +308,7 @@ Column {.sidebar data-width=350}
 
 ```{r}
 
-selectInput(
-  "data_type",
-  "Select Data Type",
-  choices = c("Deployment", "Validation"),
-  selected = "Validation",
-  width = '100%'
-)
-
 uiOutput("clear_button")
-#HTML("<br>")
 
 fileInput(
   "upload",
@@ -486,18 +436,6 @@ As with the other tables in the app:
   - Reorder the rows based on any column using the arrow in the column header.
   - Copy or download a csv of the data using the buttons in the top left.
 
-  
-### Note
-
-**Deployment Data**
-This app was developed to review Validation data; however, it is possible to upload data from a sensor string deployment. To do so:
-
-  - In the "Select Data Type" dropdown, choose "Deployment". This will colour the figures by sensor depth instead of serial number. 
-  - Ensure the metadata log has the required columns (e.g. sensor_depth_m).
-
-Note that it may take several minutes for the data to compile, with little feedback. Additionally, the interactive figures will slow to react to hover and zoom commands.
-
-A separate app is being developed to work more conveniently with deployment data.
 
 Compiled Data {data-orientation=rows data-icon="fa-table"}
 =======================================
@@ -514,13 +452,11 @@ output$p_raw <- renderPlotly({
   
   dat <- compile_data()
   
-  fig_params <- customize_fig()
-  
   p <- ss_ggplot_variables(
     dat, 
-    color_col = fig_params$point_col,
-    point_size = fig_params$point_size,
-    legend_name = fig_params$legend_name,
+    color_col = "sensor_serial_number",
+    point_size = 1,
+    legend_name = "Serial Number",
     axis_label_newline = FALSE
   )
   
@@ -532,8 +468,7 @@ output$p_raw <- renderPlotly({
         format = "png",
         filename = "temperature_validation",
         width = 900, height = 500
-      ))  #%>%
-  #  layout(margin = list(b = 90, l = 90))
+      ))  
   
   p
 })
@@ -545,7 +480,6 @@ plotlyOutput("p_raw")
 ```{r}
 renderDT({
   validate(need(input$compile, "No data to plot"))
-  req(input$data_type)
   
   download_name <- paste0(get_folder_name(), "_compiled")
   
@@ -582,7 +516,6 @@ renderDT({
         dom = 'Bft',
         paging = FALSE,
         searching = TRUE,
-        # scrollY = "500px",
         scrollX = "500px",
         columnDefs = list(list(className = 'dt-center', targets = "_all"))))
 })
@@ -619,16 +552,14 @@ output$p_trim <- renderPlotly({
 
   dat <- trim_data()
 
-  fig_params <- customize_fig()
-
   p <- ss_ggplot_variables(
     dat,
-    color_col = fig_params$point_col,
-    point_size = fig_params$point_size,
-    legend_name = fig_params$legend_name,
+    color_col = "sensor_serial_number",
+    point_size = 1,
+    legend_name = "Serial Number",
     axis_label_newline = FALSE
   )
-
+  
   p <- ggplotly(p, tooltip = "text", source = "plot2") %>%
     config(
       modeBarButtonsToRemove = list("toggleSpikelines", "autoScale2d"),
@@ -637,8 +568,7 @@ output$p_trim <- renderPlotly({
         format = "png",
         filename = "temperature_validation",
         width = 900, height = 500
-      ))  #%>%
-   # layout(margin = list(b = 90, l = 90))
+      ))  
 
   p
 })
@@ -693,7 +623,6 @@ Row {.tabset}
 
 renderPlotly({
   validate(need(input$apply_trim, "No validation data to plot"))
-  validate(need(input$data_type == "Validation", "No validation data to plot. Please choose 'Validation' from the 'Select Data Type' dropdown"))
   validate(need(input$apply_val, "No validation data to plot. Please click the 'Validate' button"))
   
   p_temp <- plot_data_sn()
@@ -709,8 +638,7 @@ renderPlotly({
         format = "png",
         filename = "temperature_validation",
         width = 900, height = 500
-      )) # %>%
-  #  layout(margin = list(b = 90, l = 90))
+      )) 
 })
 
 ```
@@ -721,7 +649,6 @@ renderPlotly({
 
 renderPlotly({
   validate(need(input$apply_trim, "No validation data to plot"))
-  validate(need(input$data_type == "Validation", "No validation data to plot. Please choose 'Validation' from the 'Select Data Type' dropdown"))
   validate(need(input$apply_val, "No validation data to plot. Please click the 'Validate' button"))
   
   p_do <- plot_data_sn()
@@ -751,7 +678,6 @@ renderPlotly({
 
 renderPlotly({
   validate(need(input$apply_trim, "No validation data to plot"))
-  validate(need(input$data_type == "Validation", "No validation data to plot. Please choose 'Validation' from the 'Select Data Type' dropdown"))
   validate(need(input$apply_val, "No validation data to plot. Please click the 'Validate' button"))
   
   p_sal <- plot_data_sn()
@@ -776,7 +702,6 @@ renderPlotly({
 ```{r}
 renderDT({
   validate(need(input$apply_trim, "No validation data to show"))
-  validate(need(input$data_type == "Validation", "No validation data to show. Please choose 'Validation' from the 'Select Data Type' dropdown"))
   validate(need(input$apply_val, "No validation data to show. Please click the 'Validate' button"))
   
   download_name <- paste0(get_folder_name(), "_validation_data")
@@ -814,7 +739,6 @@ renderDT({
 ```{r}
 renderDT({
   validate(need(input$apply_trim, "No validation results to show"))
-  validate(need(input$data_type == "Validation", "No validation results to show. Please choose 'Validation' from the 'Select Data Type' dropdown"))
   validate(need(input$apply_val, "No validation results to show. Please click the 'Validate' button"))
   
   download_name <- paste0(get_folder_name(), "_validation_results")
