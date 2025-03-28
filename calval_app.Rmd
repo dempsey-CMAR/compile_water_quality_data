@@ -372,6 +372,8 @@ The aquameasure, hobo, tidbit, vemco, and/or log folders must all be saved in th
 
 After the zip file with the validation data has been successfully uploaded, a "Compile Data" button will appear in the sidebar.
 
+**Note**: for some reason, the first time the "Compile" button is clicked, the App will refresh. You will need to re-upload the zip folder and click "Compile" again.
+
 Several things happen When this button is clicked:
 1. The app will automatically open the "Compiled Data" page.
 2. A popup message will appear to signal that the data is being compiled.
@@ -675,7 +677,6 @@ renderPlotly({
 ### Salinity
 
 ```{r}
-
 renderPlotly({
   validate(need(input$apply_trim, "No validation data to plot"))
   validate(need(input$apply_val, "No validation data to plot. Please click the 'Validate' button"))
@@ -684,7 +685,7 @@ renderPlotly({
   
   validate(need("salinity_psu" %in% names(p_sal), "No salinity data found"))
   
-  ggplotly(p$salinity_psu) %>%
+  ggplotly(p_sal$salinity_psu) %>%
     config(
       modeBarButtonsToRemove = list("toggleSpikelines", "autoScale2d"),
       displaylogo = FALSE,
