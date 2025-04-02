@@ -374,7 +374,7 @@ After the zip file with the validation data has been successfully uploaded, a "C
 
 **Note**: for some reason, the first time the "Compile" button is clicked, the App will refresh. You will need to re-upload the zip folder and click "Compile" again.
 
-Several things happen When this button is clicked:
+Several things happen when this button is clicked:
 1. The app will automatically open the "Compiled Data" page.
 2. A popup message will appear to signal that the data is being compiled.
 3. Behind the scenes, the validation data from the different sensors will be compiled into a single data frame with additional metadata columns. Depending on the size of the data files, this could take a few minutes with little feedback. Be patient.
@@ -430,7 +430,7 @@ After the data has been acceptably trimmed, click the Validate button. This will
   - tol_lower: med - tolerance
   - tol_upper: med + tolerance
   - qc_flag: 1 if the value is within the upper and lower tolerance; 4 if the value if outside of this range.
-- **Validation Results**: summary table indicating the percent of observations that passed (were within tolerance) and failed (were outside of tolerance) the validation. CMAR considers percent_pass >= 90 % acceptable for deployment. Other sensors are included in another validation test. Any sensor that fails 2 consecutive validations is sent to the manufacturer for service.
+- **Validation Results**: summary table indicating the percent of observations that passed (were within tolerance) and failed (were outside of tolerance) the validation. By CMAR standards, sensors with `percent_pass` >= 90% for each variable have passed the validation and are cleared for deployment. Any sensor that fails 2 consecutive validations is sent to the manufacturer for service.
 
 As with the other tables in the app:
 

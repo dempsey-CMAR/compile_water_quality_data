@@ -382,7 +382,7 @@ After the zip file with the validation data has been successfully uploaded, a "C
 
 **Note**: for some reason, the first time the "Compile" button is clicked, the App will refresh. You will need to re-upload the zip folder and click "Compile" again.
 
-Several things happen When the "Compile Data" button is clicked:
+Several things happen when the "Compile Data" button is clicked:
 
 1. The app will automatically open the "Preview" page.
 2. A popup message will appear to signal that the data is being compiled.
