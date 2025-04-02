@@ -353,14 +353,16 @@ The app provides a user interface to compile and trim data collected through the
 
 Please follow the instructions in the tabs above to compile the data.
 
-**Pay close attention the file format, folder structure, and metadata requirements, or else the app WILL NOT run as intended.** 
+**Pay close attention the file format, folder structure, and metadata requirements, or else the app WILL NOT run as intended.**
+
+If you have followed all instructions and the app still does not run, please email info\<at\>cmar.ca with the subject line "CMAR CMP Data Processing App Issue". Include a copy of your zip folder and a screenshot of any error messages.
 
 ### **Step 1: Upload Zipped Data**
 
 The data from a single deployment **must** be saved in a specific format and folder structure for the app to access.
 
 - A separate data file must be offloaded from each sensor and saved in .csv format.
-- The .csv files offloaded from hobo and tidbit sensors must be saved in a folder called "hobo" and named with the sensor serial number.
+- The .csv files offloaded from hobo and tidbit sensors must be saved in a folder called "hobo".
 - The .csv files downloaded from aquameasure sensors must be saved in a folder named "aquameasure".
 - The .csv files offloaded from VR2AR and VR2AR-X sensors must be saved in a folder named "vemco".
 
@@ -374,7 +376,10 @@ A metadata log with information about the deployment must be saved in a folder c
 - **sensor_serial_number**: serial number of the sensor.
 - **sensor_depth_at_low_tide_m**: the estimated depth of the sensor at low tide, in units of metres.
 
-The aquameasure, hobo, tidbit, vemco, and/or log folders must all be saved in the same folder (e.g., validation_data). This folder must be saved as a zip file and may be uploaded to the app using the "Upload Zip File" button.
+The log, aquameasure, hobo, tidbit, and/or vemco folders must all be saved in the same folder (e.g., deployment_data). This folder must be saved as a zip file and may be uploaded to the app using the "Upload Zip File" button. **This folder must only contain data from sensors that were on the same sensor string (e.g., deployed at the same location for the same deployment and retrieval dates)**.
+
+Note: the name of the zip folder must not contain the strings "hobo", "aquameasure", "vemco", or "tidbit".
+
 
 ### **Step 2: Compile Data**
 
