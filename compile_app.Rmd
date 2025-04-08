@@ -27,6 +27,12 @@ runtime: shiny
 }
 </style>
 
+```{css table-style, echo = FALSE}
+#section-example-metadata-log
+.chart-shim {
+overflow-y: scroll;
+}
+```
 
 ```{r setup, echo=FALSE, include=FALSE}
 library(data.table)
@@ -175,7 +181,19 @@ compile_data <- eventReactive(input$compile, {
   
   zip_files <- get_files()
   
-  depl_log <- read_log() %>% ss_parse_log(verbose = FALSE)
+  depl_log <- read_log()
+  
+  # do log check here so that log will still be displayed in Log tab,
+  # BUT code will not attempt to compile data
+  log_cols <- colnames(depl_log)
+  cols <- c("deployment_date", "retrieval_date", "deployment_latitude", "deployment_longitude", "sensor_type", "sensor_serial_number")
+  
+  col_check <- all(cols %in% log_cols)
+  missing_cols <- cols[which(!(cols %in% log_cols))]
+  
+  validate(need(isTRUE(col_check), paste("ERROR: Required column(s) not found in log:", paste(missing_cols, collapse = ", "))))
+  
+  depl_log <- depl_log %>% ss_parse_log(verbose = FALSE)
   depl_dates <- depl_log$deployment_dates
   sn_table <- depl_log$sn_table
   
@@ -363,10 +381,10 @@ The data from a single deployment **must** be saved in a specific format and fol
 
 - A separate data file must be offloaded from each sensor and saved in .csv format.
 - The .csv files offloaded from hobo and tidbit sensors must be saved in a folder called "hobo".
-- The .csv files downloaded from aquameasure sensors must be saved in a folder named "aquameasure".
+- The .csv files downloaded from aquameasure sensors must be saved in a folder named "aquameasure". These files must be downloaded from the aquaMeasure app using the "Device Records" selection from the "Format Options" menu.
 - The .csv files offloaded from VR2AR and VR2AR-X sensors must be saved in a folder named "vemco".
 
-A metadata log with information about the deployment must be saved in a folder called "log". The log must include a row for each sensor and the following columns:
+A metadata log with information about the deployment must be saved in a folder called "log". The log must be saved as a .csv, .xls, or .xlsx file. It must include a row for each sensor and the following columns:
 
 - **deployment_date**: the date the deployment started, in ISO-8601 format, i.e. yyyy-mm-dd. Example: 2025-03-07. This must be the same for each row.
 - **retrieval_date**: the date the deployment ended, in ISO-8601 format, i.e. yyyy-mm-dd. Example: 2025-03-10. This must be the same for each row.
@@ -374,16 +392,20 @@ A metadata log with information about the deployment must be saved in a folder c
 - **deployment_longitude**: the longitude of the deployed sensors (in decimal-degrees). Must be the same for each row.
 - **sensor_type**: the manufacturer of the sensor. Entries must include "aquameasure", "hobo", "tidbit", or "vr2ar". Example: "aquaMeasure DOT", "HOBO Pro V2".
 - **sensor_serial_number**: serial number of the sensor.
-- **sensor_depth_at_low_tide_m**: the estimated depth of the sensor at low tide, in units of metres.
+- **sensor_depth_m**: the estimated depth of the sensor at low tide, in units of metres.
+
+See the Example Metadata Log tab to view and download a log template.
 
 The log, aquameasure, hobo, tidbit, and/or vemco folders must all be saved in the same folder (e.g., deployment_data). This folder must be saved as a zip file and may be uploaded to the app using the "Upload Zip File" button. **This folder must only contain data from sensors that were on the same sensor string (e.g., deployed at the same location for the same deployment and retrieval dates)**.
+
+When the zip folder has been successfully uploaded, the [Metadata](http://127.0.0.1:4385/compile_app.Rmd#section-metadata) page will be populated with the deployment log, a map showing the deployment location, and a list of uploaded files.
 
 Note: the name of the zip folder must not contain the strings "hobo", "aquameasure", "vemco", or "tidbit".
 
 
 ### **Step 2: Compile Data**
 
-After the zip file with the validation data has been successfully uploaded, a "Compile Data" button and "Preview Window (days)" will appear in the sidebar.
+After the zip file with the deployment data has been successfully uploaded, a "Compile Data" button and "Preview Window (days)" will appear in the sidebar.
 
 **Note**: for some reason, the first time the "Compile" button is clicked, the App will refresh. You will need to re-upload the zip folder and click "Compile" again.
 
@@ -423,6 +445,51 @@ Click the "Trim Data" button. This will remove the observations before/after the
 After the "Trim Data" button is clicked, a "Download Data" button will appear.
 
 Click this to download the trimmed dataset. The file will be in a csv format and named after the original zip folder.
+
+### Example Metadata Log
+
+The example metadata log below illustrates the required columns for the compile app. Other columns may be included, but will not be used in the compile code. 
+
+Click the "CSV" button below to download the example log to use as a template.
+
+Recall that the log must:
+
+- be a csv, xls, or xlsx file.
+- be saved in a folder named "log".
+- include a row for each sensor validated.
+- include columns named exactly "deployment_date", "retrieval_date", "deployment_latitude", "deployment_longitude", "sensor_type", and "sensor_serial_number".
+
+\br
+
+```{r}
+
+log_df <- data.frame(
+  deployment_date = rep("2024-04-08", 4),
+  retrieval_date = rep("2025-03-12", 4),
+  deployment_latitude = rep(44.664, 4),
+  deployment_longitude = rep(63.560, 4),
+  sensor_type = c("hobo", "aquameasure", "hobo", "vr2ar"),
+  sensor_serial_number = c(21465779, 671022, 21488196, 548562),
+  sensor_depth_m = c(2, 5, 10, 15)
+)
+
+datatable(
+  log_df,
+  rownames = FALSE,
+  extensions = 'Buttons',
+  options = list(
+    dom = 'Bft',
+    paging = FALSE,
+    searching = FALSE,
+    buttons = list(
+      list(extend = 'csv', title = "example_deployment_log") 
+    ),
+    columnDefs = list(list(className = 'dt-center', targets = "_all"))
+  )
+)
+
+```
+
 
 
 Metadata {data-orientation=rows data-icon="fa-location-dot"}

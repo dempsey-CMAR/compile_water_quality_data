@@ -28,6 +28,13 @@ runtime: shiny
 </style>
 
 
+```{css table-style, echo = FALSE}
+#section-example-metadata-log
+.chart-shim {
+overflow-y: scroll;
+}
+```
+
 ```{r setup, echo=FALSE, include=FALSE}
 
 library(calval)
@@ -149,6 +156,13 @@ read_log <- reactive({
   
   ss_log <- ss_read_log(path, parse = FALSE, verbose = FALSE)
   
+  # check_cols <- colnames(ss_log)
+  # 
+  # validate(need("deployment_date" %in% check_cols, "ERROR: Column deployment_date not found in log"))
+  # validate(need("retrieval_date" %in% check_cols, "ERROR: Column retrieval_date not found in log"))
+  # validate(need("sensor_type" %in% check_cols, "ERROR: Column sensor_type not found in log"))
+  # validate(need("sensor_serial_number" %in% check_cols, "ERROR: Column sensor_serial_number not found in log"))
+  
   return(ss_log)
 })
 
@@ -156,7 +170,21 @@ compile_data <- eventReactive(input$compile, {
  
   zip_files <- get_files()
   
-  depl_log <- read_log() %>% ss_parse_log(verbose = FALSE)
+  depl_log <- read_log()
+
+  # do log check here so that log will still be displayed in Log tab,
+  # BUT code will not attempt to compile data
+  log_cols <- colnames(depl_log)
+  cols <- c("deployment_date", "retrieval_date", "sensor_type", "sensor_serial_number")
+  
+  col_check <- all(cols %in% log_cols)
+  missing_cols <- cols[which(!(cols %in% log_cols))]
+
+  validate(need(isTRUE(col_check), paste("ERROR: Required column(s) not found in log:", paste(missing_cols, collapse = ", "))))
+  
+  depl_log <- depl_log %>%
+    ss_parse_log(area_info = FALSE, config = FALSE, verbose = FALSE)
+
   depl_dates <- depl_log$deployment_dates
   sn_table <- depl_log$sn_table
   
@@ -210,7 +238,6 @@ compile_data <- eventReactive(input$compile, {
     )
     depl_data <- bind_rows(depl_data, vemco)
   }
-  
   
   depl_data <- depl_data %>% 
     select(-contains("sensor_depth"))
@@ -343,7 +370,7 @@ Col {.tabset}
 
 Welcome to the [Centre for Marine Applied Research](https://cmar.ca/)'s (CMAR) Sensor Validation App. The app provides a user interface to validate the calibration of sensors deployed as part of CMAR's [Coastal Monitoring Program](https://cmar.ca/coastal-monitoring-program/).
 
-The full Validation procedure is outlined in [CMAR's Sensor Validation Reference Sheet]().
+The full Validation procedure is outlined in [CMAR's Water Quality Sensor Validation Reference Sheet](https://cmar.ca/wp-content/uploads/sites/22/2025/04/water_quality_sensor_validation_reference_sheet.pdf).
 
 Please follow the instructions in the tabs above to generate the validation results.
 
@@ -357,19 +384,24 @@ The data from a single validation test **must** be saved in a specific format an
 
 - A separate data file must be offloaded from each sensor and saved in .csv format.
 - The .csv files offloaded from hobo and tidbit sensors must be saved in a folder called "hobo".
-- The .csv files downloaded from aquameasure sensors must be saved in a folder named "aquameasure".
+- The .csv files downloaded from aquameasure sensors must be saved in a folder named "aquameasure". These files must be downloaded from the aquaMeasure app using the "Device Records" selection from the "Format Options" menu.
 - The .csv files offloaded from VR2AR and VR2AR-X sensors must be saved in a folder named "vemco".
 
-A metadata log with information about the validation must be saved in a folder called "log". The log must include a row for each sensor validated and the following columns:
+A metadata log with information about the validation must be saved in a folder called "log". The log must be saved as a .csv, .xls, or .xlsx file. It must include a row for each sensor and the following columns:
 
 - **deployment_date**: the date the validation test started, in ISO-8601 format, i.e. yyyy-mm-dd. Example: 2025-03-07. This must be the same for each row.
 - **retrieval_date**: the date the validation test ended, in ISO-8601 format, i.e. yyyy-mm-dd. Example: 2025-03-10. This must be the same for each row.
-- **sensor_type**: the manufacturer of the sensor being validated. Entries must include "aquameasure", "hobo", "tidbit", or "vr2ar". Example: "aquaMeasure DOT", "HOBO Pro V2".
+- **sensor_type**: the manufacturer of the sensor being validated. Entries must include "aquameasure", "hobo", "tidbit", or "vr2ar" (letter case does not matter). Example: "aquaMeasure DOT", "HOBO Pro V2".
 - **sensor_serial_number**: serial number of the sensor being validated.
+
+See the Example Metadata Log tab to view and download a log template.
 
 The log, aquameasure, hobo, tidbit, and/or vemco folders must all be saved in the same folder (e.g., validation_data, VAL001). This folder must be saved as a zip file and may be uploaded to the app using the "Upload Zip File" button. **This folder must only contain data from sensors that were validated in the same batch (i.e., validated in the same vessel for the same deployment and retrieval dates)**.
 
-Note: the name of the zip folder must not contain the strings "hobo", "aquameasure", "vemco", or "tidbit".
+Notes: 
+
+- the name of the zip folder must not contain the strings "hobo", "aquameasure", "vemco", or "tidbit".
+- the timestamp for all files should in in the same time zone.
 
 
 ### **Step 2: Compile Data**
@@ -441,6 +473,52 @@ As with the other tables in the app:
   - Search in the table using the "Search" bar.
   - Reorder the rows based on any column using the arrow in the column header.
   - Copy or download a csv of the data using the buttons in the top left.
+
+### Example Metadata Log
+
+The example metadata log below illustrates the required columns for the validation app. Other columns may be included, but will not be used in the validation code. 
+
+Click the "CSV" button below to download the example log to use as a template.
+
+Recall that the log must:
+
+- be a csv, xls, or xlsx file.
+- be saved in a folder named "log".
+- include a row for each sensor validated.
+- include columns named exactly "deployment_date", "retrieval_date", "sensor_type", and "sensor_serial_number".
+
+\br
+
+```{r}
+
+log_df <- data.frame(
+  deployment_date = rep("2025-04-08", 8),
+  retrieval_date = rep("2025-04-09", 8),
+  sensor_type = c("aquameasure", "aquameasure", "aquameasure", "aquameasure",
+                  "hobo", "hobo", "hobo", "hobo"),
+  sensor_serial_number = c(671022, 671188, 675018, 675016, 
+                           21465779, 21488196, 21465806, 21083007
+  )
+)
+
+datatable(
+  log_df,
+  rownames = FALSE,
+  extensions = 'Buttons',
+  options = list(
+    dom = 'Bft',
+    paging = FALSE,
+    searching = FALSE,
+    # scrollY = "500px",
+    #scrollX = "500px",
+    buttons = list(
+      list(extend = 'csv', title = "example_validation_log") 
+    ),
+    columnDefs = list(list(className = 'dt-center', targets = "_all"))
+  )
+)
+
+```
 
 
 Compiled Data {data-orientation=rows data-icon="fa-table"}
