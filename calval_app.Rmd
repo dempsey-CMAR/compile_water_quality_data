@@ -1,6 +1,6 @@
 ---
 title: "CMAR Sensor Validation App"
-date: "version 0.0.9000"
+date: "version 0.0.9001"
 output:
   flexdashboard::flex_dashboard:
     vertical_layout: fill
@@ -81,7 +81,7 @@ output$compile_button <- renderUI({
 output$trim_start <- renderUI({
   dat <- compile_data()
   textInput(
-    "ts_start", "First Good Timestamp",
+    "ts_start", "First Good Timestamp:",
     value = min(dat$timestamp_utc),
     width = '100%',
     placeholder = "yyyy-mm-dd hh:mm:ss"
@@ -91,7 +91,7 @@ output$trim_start <- renderUI({
 output$trim_end <- renderUI({
   dat <- compile_data()
   textInput(
-    "ts_end", "Last Good Timestamp",
+    "ts_end", "Last Good Timestamp:",
     value = max(dat$timestamp_utc),
     width = '100%',
     placeholder = "yyyy-mm-dd hh:mm:ss"
@@ -156,18 +156,13 @@ read_log <- reactive({
   
   ss_log <- ss_read_log(path, parse = FALSE, verbose = FALSE)
   
-  # check_cols <- colnames(ss_log)
-  # 
-  # validate(need("deployment_date" %in% check_cols, "ERROR: Column deployment_date not found in log"))
-  # validate(need("retrieval_date" %in% check_cols, "ERROR: Column retrieval_date not found in log"))
-  # validate(need("sensor_type" %in% check_cols, "ERROR: Column sensor_type not found in log"))
-  # validate(need("sensor_serial_number" %in% check_cols, "ERROR: Column sensor_serial_number not found in log"))
-  
   return(ss_log)
 })
 
 compile_data <- eventReactive(input$compile, {
  
+  trim <- TRUE
+  
   zip_files <- get_files()
   
   depl_log <- read_log()
@@ -195,23 +190,41 @@ compile_data <- eventReactive(input$compile, {
   if(nrow(sn_am) > 0) {
     am <- ss_compile_aquameasure_data(
       path = zip_files[grep("aquameasure", zip_files)],
-      sn_table = sn_table,
+      sn_table = sn_am,
       deployment_dates = depl_dates,
-      trim = TRUE
+      trim = trim
     )
     depl_data <- bind_rows(depl_data, am)
   }
   
   sn_hobo <- sn_table %>%
-    filter(str_detect(log_sensor, regex("hobo", ignore_case = TRUE)))
+    filter(
+      str_detect(log_sensor, regex("hobo", ignore_case = TRUE)),
+      !str_detect(log_sensor, regex("ph", ignore_case = TRUE))
+    )
   if(nrow(sn_hobo) > 0) {
+    path <- zip_files[grep("hobo", zip_files)]
+    path <- path[grep("ph", path, invert = TRUE)]
+    
     hobo <- ss_compile_hobo_data(
-      path = zip_files[grep("hobo", zip_files)],
-      sn_table = sn_table,
+      path = path,
+      sn_table = sn_hobo,
       deployment_dates = depl_dates,
-      trim = TRUE
+      trim = trim
     )
     depl_data <- bind_rows(depl_data, hobo)
+  }
+  
+  sn_hobo_ph <- sn_table %>%
+    filter(str_detect(log_sensor, regex("ph", ignore_case = TRUE)))
+  if(nrow(sn_hobo_ph) > 0) {
+    hobo_ph <- ss_compile_hobo_ph_data(
+      path = zip_files[grep("hobo_ph", zip_files)],
+      sn_table = sn_hobo_ph,
+      deployment_dates = depl_dates,
+      trim = trim
+    )
+    depl_data <- bind_rows(depl_data, hobo_ph)
   }
   
   sn_tidbit <- sn_table %>%
@@ -221,7 +234,7 @@ compile_data <- eventReactive(input$compile, {
       path = zip_files[grep("tidbit", zip_files)],
       sn_table = sn_tidbit,
       deployment_dates = depl_dates,
-      trim = TRUE,
+      trim = trim,
       sensor_make = "tidbit"
     )
     depl_data <- bind_rows(depl_data, tidbit)
@@ -234,7 +247,7 @@ compile_data <- eventReactive(input$compile, {
       path = zip_files[grep("vemco", zip_files)],
       sn_table = sn_vem,
       deployment_dates = depl_dates,
-      trim = TRUE
+      trim = trim
     )
     depl_data <- bind_rows(depl_data, vemco)
   }
@@ -383,8 +396,9 @@ If you have followed all instructions and the app still does not run, please ema
 The data from a single validation test **must** be saved in a specific format and folder structure for the app to access.
 
 - A separate data file must be offloaded from each sensor and saved in .csv format.
-- The .csv files offloaded from hobo and tidbit sensors must be saved in a folder called "hobo".
-- The .csv files downloaded from aquameasure sensors must be saved in a folder named "aquameasure". These files must be downloaded from the aquaMeasure app using the "Device Records" selection from the "Format Options" menu.
+- The .csv files offloaded from HOBO U22 (temperature) and HOBO U26-001 (temperature and dissolved oxygen) sensors must be saved in a folder called "hobo".
+- The .csv files offloaded from HOBO MX2501 (temperature and pH) sensors must be saved in a folder called "hobo_ph".
+- The .csv files downloaded from aquaMeasure DOT and SAL sensors must be saved in a folder named "aquameasure". These files must be downloaded from the aquaMeasure app using the "Device Records" selection from the "Format Options" menu.
 - The .csv files offloaded from VR2AR and VR2AR-X sensors must be saved in a folder named "vemco".
 
 A metadata log with information about the validation must be saved in a folder called "log". The log must be saved as a .csv, .xls, or .xlsx file. It must include a row for each sensor and the following columns:
@@ -396,7 +410,7 @@ A metadata log with information about the validation must be saved in a folder c
 
 See the Example Metadata Log tab to view and download a log template.
 
-The log, aquameasure, hobo, tidbit, and/or vemco folders must all be saved in the same folder (e.g., validation_data, VAL001). This folder must be saved as a zip file and may be uploaded to the app using the "Upload Zip File" button. **This folder must only contain data from sensors that were validated in the same batch (i.e., validated in the same vessel for the same deployment and retrieval dates)**.
+The log, aquameasure, hobo, hobo_ph, and/or vemco folders must all be saved in the same folder (e.g., validation_data, VAL001). This folder must be saved as a zip file and may be uploaded to the app using the "Upload Zip File" button. **This folder must only contain data from sensors that were validated in the same batch (i.e., validated in the same vessel for the same deployment and retrieval dates)**.
 
 Notes: 
 
@@ -719,7 +733,7 @@ renderPlotly({
       modeBarButtonsToRemove = list("toggleSpikelines", "autoScale2d"),
       displaylogo = FALSE,
       toImageButtonOptions = list(
-        format = "png",
+        format = "png", 
         filename = "temperature_validation",
         width = 900, height = 500
       )) 
@@ -801,6 +815,30 @@ renderPlotly({
       toImageButtonOptions = list(
         format = "png",
         filename = "salinity_validation",
+        width = 900, height = 500)
+    ) 
+})
+
+``` 
+
+### pH
+
+```{r}
+renderPlotly({
+  validate(need(input$apply_trim, "No validation data to plot"))
+  validate(need(input$apply_val, "No validation data to plot. Please click the 'Validate' button"))
+  
+  p_ph <- plot_data_sn()
+  
+  validate(need("ph_ph" %in% names(p_ph), "No pH data found"))
+  
+  ggplotly(p_ph$ph_ph) %>%
+    config(
+      modeBarButtonsToRemove = list("toggleSpikelines", "autoScale2d"),
+      displaylogo = FALSE,
+      toImageButtonOptions = list(
+        format = "png",
+        filename = "ph_validation",
         width = 900, height = 500)
     ) 
 })

@@ -1,6 +1,6 @@
 ---
 title: "CMAR CMP Data Processing App"
-date: "version 0.0.9000"
+date: "version 0.0.9001"
 output:
   flexdashboard::flex_dashboard:
     orientation: rows
@@ -89,7 +89,7 @@ output$preview_button <- renderUI({
 output$trim_start <- renderUI({
   dat <- compile_data()
   textInput(
-    "ts_start", "First Good Timestamp",
+    "ts_start", "First Good Timestamp:",
     value = min(dat$timestamp_utc),
     width = '100%',
     placeholder = "yyyy-mm-dd hh:mm:ss"
@@ -99,7 +99,7 @@ output$trim_start <- renderUI({
 output$trim_end <- renderUI({
   dat <- compile_data()
   textInput(
-    "ts_end", "Last Good Timestamp",
+    "ts_end", "Last Good Timestamp:",
     value = max(dat$timestamp_utc),
     width = '100%',
     placeholder = "yyyy-mm-dd hh:mm:ss"
@@ -204,7 +204,7 @@ compile_data <- eventReactive(input$compile, {
   if(nrow(sn_am) > 0) {
     am <- ss_compile_aquameasure_data(
       path = zip_files[grep("aquameasure", zip_files)],
-      sn_table = sn_table,
+      sn_table = sn_am,
       deployment_dates = depl_dates,
       trim = TRUE
     )
@@ -212,11 +212,17 @@ compile_data <- eventReactive(input$compile, {
   }
   
   sn_hobo <- sn_table %>%
-    filter(str_detect(log_sensor, regex("hobo", ignore_case = TRUE)))
+    filter(
+      str_detect(log_sensor, regex("hobo", ignore_case = TRUE)),
+      !str_detect(log_sensor, regex("ph", ignore_case = TRUE))
+    )
   if(nrow(sn_hobo) > 0) {
+    path <- zip_files[grep("hobo", zip_files)]
+    path <- path[grep("ph", path, invert = TRUE)]
+    
     hobo <- ss_compile_hobo_data(
-      path = zip_files[grep("hobo", zip_files)],
-      sn_table = sn_table,
+      path = path,
+      sn_table = sn_hobo,
       deployment_dates = depl_dates,
       trim = TRUE
     )
@@ -234,6 +240,18 @@ compile_data <- eventReactive(input$compile, {
       sensor_make = "tidbit"
     )
     depl_data <- bind_rows(depl_data, tidbit)
+  }
+  
+  sn_hobo_ph <- sn_table %>%
+    filter(str_detect(log_sensor, regex("ph", ignore_case = TRUE)))
+  if(nrow(sn_hobo_ph) > 0) {
+    hobo_ph <- ss_compile_hobo_ph_data(
+      path = zip_files[grep("hobo_ph", zip_files)],
+      sn_table = sn_hobo_ph,
+      deployment_dates = depl_dates,
+      trim = TRUE
+    )
+    depl_data <- bind_rows(depl_data, hobo_ph)
   }
   
   sn_vem <- sn_table %>%
@@ -380,7 +398,8 @@ If you have followed all instructions and the app still does not run, please ema
 The data from a single deployment **must** be saved in a specific format and folder structure for the app to access.
 
 - A separate data file must be offloaded from each sensor and saved in .csv format.
-- The .csv files offloaded from hobo and tidbit sensors must be saved in a folder called "hobo".
+- The .csv files offloaded from HOBO U22 (temperature) and HOBO U26-001 (temperature and dissolved oxygen) sensors must be saved in a folder called "hobo".
+- The .csv files offloaded from HOBO MX2501 (temperature and pH) sensors must be saved in a folder called "hobo_ph".
 - The .csv files downloaded from aquameasure sensors must be saved in a folder named "aquameasure". These files must be downloaded from the aquaMeasure app using the "Device Records" selection from the "Format Options" menu.
 - The .csv files offloaded from VR2AR and VR2AR-X sensors must be saved in a folder named "vemco".
 
@@ -396,7 +415,7 @@ A metadata log with information about the deployment must be saved in a folder c
 
 See the Example Metadata Log tab to view and download a log template.
 
-The log, aquameasure, hobo, tidbit, and/or vemco folders must all be saved in the same folder (e.g., deployment_data). This folder must be saved as a zip file and may be uploaded to the app using the "Upload Zip File" button. **This folder must only contain data from sensors that were on the same sensor string (e.g., deployed at the same location for the same deployment and retrieval dates)**.
+The log, aquameasure, hobo, hobo_ph, and/or vemco folders must all be saved in the same folder (e.g., deployment_data). This folder must be saved as a zip file and may be uploaded to the app using the "Upload Zip File" button. **This folder must only contain data from sensors that were on the same sensor string (e.g., deployed at the same location for the same deployment and retrieval dates)**.
 
 When the zip folder has been successfully uploaded, the [Metadata](http://127.0.0.1:4385/compile_app.Rmd#section-metadata) page will be populated with the deployment log, a map showing the deployment location, and a list of uploaded files.
 
